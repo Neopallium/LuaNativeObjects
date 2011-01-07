@@ -535,6 +535,14 @@ local obj_type_check_delete_push = {
 #define obj_type_${object_name}_push(L, obj, flags) \
   obj_simple_udata_luapush(L, &(obj), sizeof(${object_name}), &(obj_type_${object_name}))
 ]],
+['embed'] = [[
+#define obj_type_${object_name}_check(L, _index) \
+  (${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name}))
+#define obj_type_${object_name}_delete(L, _index, flags) \
+  (${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
+#define obj_type_${object_name}_push(L, obj, flags) \
+  obj_simple_udata_luapush(L, obj, sizeof(${object_name}), &(obj_type_${object_name}))
+]],
 ['cast pointer'] = [[
 #define obj_type_${object_name}_check(L, _index) \
   (${object_name})(uintptr_t)obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
@@ -564,6 +572,7 @@ local obj_type_check_delete_push = {
 -- prefix for default equal/tostring methods.
 local obj_type_equal_tostring = {
 ['simple'] = 'obj_simple_udata_default',
+['embed'] = 'obj_simple_udata_default',
 ['cast pointer'] = 'obj_udata_default',
 ['generic'] = 'obj_udata_default',
 ['generic_weak'] = 'obj_udata_default',
@@ -764,7 +773,7 @@ object_end = function(self, rec, parent)
 	if not rec.no_weak_ref then
 		flags[#flags+1] = 'OBJ_TYPE_FLAG_WEAK_REF'
 	end
-	if ud_type == 'simple' then
+	if ud_type == 'simple' or ud_type == 'embed' then
 		flags[#flags+1] = 'OBJ_TYPE_SIMPLE'
 	end
 	if #flags > 0 then

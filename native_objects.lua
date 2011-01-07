@@ -182,6 +182,9 @@ function object(name)
 		rec.name = name
 		-- map the c_type to this record
 		new_c_type(name, rec)
+		if userdata_type == 'embed' then
+			rec.no_weak_ref = true
+		end
 	else
 		rec.no_weak_ref = true
 		ctype(name, rec, "object")
