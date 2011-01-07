@@ -1,0 +1,6 @@
+.*.swp
+*~
+examples/*.so
+examples/*.o
+examples/*.c
+examples/line.png

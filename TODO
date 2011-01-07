@@ -1,0 +1,5 @@
+* add support for enumerations.  Try creating a userdata object for the 'enum' type and
+  overriding add/sub/concat metamethods.  Named 'enum' values are marked constant.
+	When a const. 'enum' value is added to another const/non-const 'enum' value,
+	a new non-const 'enum' userdata object will be created.
+
