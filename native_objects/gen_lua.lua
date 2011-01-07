@@ -457,12 +457,15 @@ static void obj_type_register(lua_State *L, const obj_type_reg *type_reg) {
 			lua_pushcfunction(L, reg_list[0].func); /* push single 'new' function. */
 		}
 		/* register "public functions table" or "constructor" as '<object_name> */
-#if REG_OBJECTS_AS_GLOBALS
-		lua_pushvalue(L, -1);            /* dup value. */
-		lua_setglobal(L, type->name);    /* global: <object_name> = value */
-#endif
-		lua_setfield(L, -3, type->name); /* module["<object_name>"] = value */
+	} else {
+		/* register "methods table" as '<object_name> */
+		lua_pushvalue(L, -1);
 	}
+#if REG_OBJECTS_AS_GLOBALS
+	lua_pushvalue(L, -1);            /* dup value. */
+	lua_setglobal(L, type->name);    /* global: <object_name> = value */
+#endif
+	lua_setfield(L, -3, type->name); /* module["<object_name>"] = value */
 
 	luaL_newmetatable(L, type->name); /* create metatable */
 	lua_pushliteral(L, ".name");
