@@ -166,6 +166,8 @@ function error_code(name)
 	-- make error_code record
 	ctype(name,rec,"error_code")
 	rec.c_type = c_type
+	-- mark this type as an error code.
+	rec._is_error_code = true
 end
 end
 end
@@ -846,6 +848,21 @@ local function process_module_file(file)
 	-- load language module
 	--
 	require("native_objects.lang_" .. gen_lang)
+
+	--
+	-- mark functions which have an error_code var_out.
+	--
+	process_records{
+	var_out = function(self, rec, parent)
+		local var_type = rec.c_type_rec
+		if var_type._is_error_code then
+			assert(parent._has_error_code == nil,
+				"A function/method can only have one var_out with type error_code.")
+			-- mark the function as having an error code.
+			parent._has_error_code = rec
+		end
+	end,
+	}
 
 	--
 	-- load gen. module

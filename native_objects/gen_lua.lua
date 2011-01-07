@@ -1073,6 +1073,7 @@ c_function = function(self, rec, parent)
 		c_name = c_name .. '__func'
 	end
 	rec.c_name = c_name
+	rec.pushed_values = 0 -- track number of values pushed onto the stack.
 	rec:add_var('object_name', parent.name)
 	-- check if this is object free/destructure method
 	if rec.is_destructor then
@@ -1111,6 +1112,17 @@ c_function = function(self, rec, parent)
 			{ '  ', wrap_type,' *wrap;\n',
 			})
 	end
+	-- add error handling code
+	local error_code = rec._has_error_code
+	if error_code then
+		local err_type = error_code.c_type_rec
+		rec:write_part("pre",
+			{ '  int is_error = 0;\n',
+			})
+		rec:write_part("post",
+			{ '  is_error = ', err_type.is_error_check(error_code) ,';\n',
+			})
+	end
 end,
 c_function_end = function(self, rec, parent)
 	-- is this a wrapper function
@@ -1140,7 +1152,7 @@ c_function_end = function(self, rec, parent)
 	local parts = {"pre", "src", "post"}
 	rec:vars_parts(parts)
 
-	local outs = rec:get_sub_record_count("var_out")
+	local outs = rec.pushed_values --rec:get_sub_record_count("var_out")
 	rec:write_part("post",
 		{'  return ', outs, ';\n',
 		 '}\n\n'})
@@ -1207,7 +1219,35 @@ var_out = function(self, rec, parent)
 	parent:write_part("pre",
 		{'  ', rec.c_type, ' ${', rec.name, '}', init, ';\n'})
 	-- push Lua value onto the stack.
-	parent:write_part("post", { lua:_push(rec, own) })
+	local push_count = 1
+	if parent._has_error_code == rec then
+		-- if error_code is the first var_out, then push two values.
+		if rec._rec_idx == 1 then
+			push_count = 2
+			parent:write_part("post", {
+			'  if(is_error) {\n',
+			'    lua_pushnil(L);\n',
+			'    ', lua:_push(rec, own),
+			'  } else {\n',
+			'    lua_pushboolean(L, 1);\n',
+			'    lua_pushnil(L);\n',
+			'  }\n',
+			})
+		else
+			parent:write_part("post", { lua:_push(rec, own) })
+		end
+	elseif rec.no_nil_on_error ~= true and parent._has_error_code then
+		parent:write_part("post", {
+		'  if(is_error) {\n',
+		'    lua_pushnil(L);\n',
+		'  } else {\n',
+		'  ', lua:_push(rec, own),
+		'  }\n',
+		})
+	else
+		parent:write_part("post", { lua:_push(rec, own) })
+	end
+	parent.pushed_values = parent.pushed_values + push_count
 end,
 cb_in = function(self, rec, parent)
 	parent:add_rec_var(rec)
