@@ -28,6 +28,7 @@
 --
 local obj_udata_types = [[
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
