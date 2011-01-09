@@ -26,6 +26,17 @@
 --
 -- templates
 --
+local generated_output_header = [[
+/***********************************************************************************************
+************************************************************************************************
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!! Warning this file was generated from a set of *.nobj.lua definition files !!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+************************************************************************************************
+***********************************************************************************************/
+
+]]
+
 local obj_udata_types = [[
 
 #include <stdbool.h>
@@ -438,35 +449,45 @@ static FUNC_UNUSED int obj_simple_udata_default_tostring(lua_State *L) {
 	return 1;
 }
 
+static int obj_constructor_call_wrapper(lua_State *L) {
+	/* replace '__call' table with constructor function. */
+	lua_pushvalue(L, lua_upvalueindex(1));
+	lua_replace(L, 1);
+
+	/* call constructor function with all parameters after the '__call' table. */
+	lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);
+	/* return all results from constructor. */
+	return lua_gettop(L);
+}
+
 static void obj_type_register(lua_State *L, const obj_type_reg *type_reg) {
 	const luaL_reg *reg_list;
 	obj_type *type = type_reg->type;
 	const obj_base *base = type_reg->bases;
 	const obj_const *constants = type_reg->constants;
 
-	/* create methods table. */
-	lua_newtable(L);
-	luaL_register(L, NULL, type_reg->methods); /* fill methods table. */
-
 	/* create public functions table. */
 	reg_list = type_reg->pub_funcs;
 	if(reg_list != NULL && reg_list[0].name != NULL) {
-		if(reg_list[1].name != NULL) {
-			lua_newtable(L);
-			luaL_register(L, NULL, reg_list); /* fill public functions table. */
-		} else {
-			lua_pushcfunction(L, reg_list[0].func); /* push single 'new' function. */
-		}
-		/* register "public functions table" or "constructor" as '<object_name> */
+		/* register "constructors" as to object's public API */
+		luaL_register(L, NULL, reg_list); /* fill public API table. */
+
+		/* make public API table callable as the default constructor. */
+		lua_newtable(L); /* create metatable */
+		lua_pushliteral(L, "__call");
+		lua_pushcfunction(L, reg_list[0].func); /* push first constructor function. */
+		lua_pushcclosure(L, obj_constructor_call_wrapper, 1); /* make __call wrapper. */
+		lua_rawset(L, -3);         /* metatable.__call = <default constructor> */
+		lua_setmetatable(L, -2);
+
+		lua_pop(L, 1); /* pop public API table, don't need it any more. */
+		/* create methods table. */
+		lua_newtable(L);
 	} else {
-		/* register "methods table" as '<object_name> */
-		lua_pushvalue(L, -1);
+		/* register all methods as public functions. */
 	}
-#if REG_OBJECTS_AS_GLOBALS
-	lua_pushvalue(L, -1);            /* dup value. */
-	lua_setglobal(L, type->name);    /* global: <object_name> = value */
-#endif
-	lua_setfield(L, -3, type->name); /* module["<object_name>"] = value */
+
+	luaL_register(L, NULL, type_reg->methods); /* fill methods table. */
 
 	luaL_newmetatable(L, type->name); /* create metatable */
 	lua_pushliteral(L, ".name");
@@ -582,12 +603,15 @@ local obj_type_equal_tostring = {
 ['generic_weak'] = 'obj_udata_default',
 }
 
-local luaopenTemp = [[
-int luaopen_${module_name}(lua_State *L) {
-	const obj_type_reg *reg = obj_type_regs;
-	/* module table. */
-	luaL_register(L, "${module_name}", ${module_name}_function);
-
+local create_object_instance_cache = [[
+static void create_object_instance_cache(lua_State *L) {
+	lua_pushlightuserdata(L, obj_udata_weak_ref_key); /* key for weak table. */
+	lua_rawget(L, LUA_REGISTRYINDEX);  /* check if weak table exists already. */
+	if(!lua_isnil(L, -1)) {
+		lua_pop(L, 1); /* pop weak table. */
+		return;
+	}
+	lua_pop(L, 1); /* pop nil. */
 	/* create weak table for object instance references. */
 	lua_pushlightuserdata(L, obj_udata_weak_ref_key); /* key for weak table. */
 	lua_newtable(L);               /* weak table. */
@@ -597,14 +621,63 @@ int luaopen_${module_name}(lua_State *L) {
 	lua_rawset(L, -3);             /* metatable.__mode = 'v'  weak values. */
 	lua_setmetatable(L, -2);       /* add metatable to weak table. */
 	lua_rawset(L, LUA_REGISTRYINDEX);  /* create reference to weak table. */
+}
+
+]]
+
+local luaopen_main = [[
+int luaopen_${module_c_name}(lua_State *L) {
+	const obj_type_reg *reg = obj_type_regs;
+	const luaL_Reg *submodules = submodule_libs;
+	/* module table. */
+	luaL_register(L, "${module_name}", ${module_c_name}_function);
+
+	/* create object cache. */
+	create_object_instance_cache(L);
+
+	for(; submodules->func != NULL ; submodules++) {
+		lua_pushcfunction(L, submodules->func);
+		lua_pushstring(L, submodules->name);
+		lua_call(L, 1, 0);
+	}
 
 	/* register objects */
-	while(reg->type != NULL) {
+	for(; reg->type != NULL ; reg++) {
+		lua_newtable(L); /* create public API table for object. */
+		lua_pushvalue(L, -1); /* dup. object's public API table. */
+		lua_setfield(L, -3, reg->type->name); /* module["<object_name>"] = <object public API> */
+#if REG_OBJECTS_AS_GLOBALS
+		lua_pushvalue(L, -1);                 /* dup value. */
+		lua_setglobal(L, reg->type->name);    /* global: <object_name> = <object public API> */
+#endif
 		obj_type_register(L, reg);
-		reg++;
 	}
+
 	return 1;
 }
+]]
+
+local luaopen_submodule = [[
+int luaopen_${module_c_name}_${object_name}(lua_State *L) {
+	const obj_type_reg *reg = &(submodule_${object_name}_reg);
+	const luaL_Reg null_reg_list = { NULL, NULL };
+
+	/* create object cache. */
+	create_object_instance_cache(L);
+
+	/* submodule table. */
+	luaL_register(L, "${module_name}.${object_name}", &(null_reg_list));
+
+	/* register submodule. */
+	lua_pushvalue(L, -1);   /* dup. submodule's table. */
+	obj_type_register(L, reg);
+#if REG_OBJECTS_AS_GLOBALS
+	lua_pushvalue(L, -1);            /* dup value. */
+	lua_setglobal(L, reg->type->name);    /* global: <object_name> = <object public API> */
+#endif
+	return 1;
+}
+
 ]]
 
 -- re-map meta-methods.
@@ -653,6 +726,8 @@ _includes = {},
 
 -- record handlers
 c_module = function(self, rec, parent)
+	local module_c_name = rec.name:gsub('(%.)','_')
+	rec:add_var('module_c_name', module_c_name)
 	rec:add_var('module_name', rec.name)
 	rec:add_var('object_name', rec.name)
 	self._cur_module = rec
@@ -661,8 +736,11 @@ c_module = function(self, rec, parent)
 	-- start obj_type array
 	rec:write_part("obj_type_regs",
 		{'static const obj_type_reg obj_type_regs[] = {\n'})
-	-- add luaopen function.
-	rec:write_part("luaopen", luaopenTemp)
+	-- start submodule_libs array
+	rec:write_part("submodule_libs",
+		{'static const luaL_Reg submodule_libs[] = {\n'})
+	-- add create_object_instance_cache function.
+	rec:write_part("luaopen", create_object_instance_cache)
 	-- package_is_constructor?
 	rec:write_part("defines",
 		{'#define REG_PACKAGE_IS_CONSTRUCTOR ',(rec.package_is_constructor and 1 or 0),'\n'})
@@ -679,7 +757,7 @@ c_module = function(self, rec, parent)
 	rec.functions_regs = 'function_regs'
 	rec.methods_regs = 'function_regs'
 	rec:write_part(rec.methods_regs,
-		{'static const luaL_reg ${module_name}_function[] = {\n'})
+		{'static const luaL_reg ${module_c_name}_function[] = {\n'})
 end,
 c_module_end = function(self, rec, parent)
 	-- end obj_type array
@@ -687,11 +765,18 @@ c_module_end = function(self, rec, parent)
 	'  {NULL, NULL, NULL, NULL, NULL, NULL, NULL}\n',
 	'};\n\n'
 	})
+	-- end submodule_libs array
+	rec:write_part("submodule_libs", {
+	'  {NULL, NULL}\n',
+	'};\n\n'
+	})
 	-- end function ergs
 	rec:write_part(rec.methods_regs, {
 	'  {NULL, NULL}\n',
 	'};\n\n'
 	})
+	-- add main luaopen function.
+	rec:write_part("luaopen", luaopen_main)
 	rec:write_part("helper_funcs", objHelperFunc)
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "src" })
@@ -700,8 +785,8 @@ c_module_end = function(self, rec, parent)
 		"function_regs", "methods_regs", "metas_regs", "base_regs", "field_regs", "const_regs"}
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = {"funcdefs", "obj_type_regs", "helper_funcs", "extra_code", "methods",
-		"reg_arrays", "luaopen"}
+	local parts = {"funcdefs", "obj_type_regs", "submodule_regs", "submodule_libs", "helper_funcs",
+		"extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
 	rec:vars_parts(parts)
 
 	self._cur_module = nil
@@ -833,11 +918,27 @@ object_end = function(self, rec, parent)
 	'};\n\n'
 	})
 	-- add obj_type to register array.
-	rec:write_part("obj_type_regs", {
+	local object_reg_info = {
 	'  { &(', rec._obj_type_name, '), obj_${object_name}_pub_funcs, obj_${object_name}_methods, ',
 		'obj_${object_name}_metas, obj_${object_name}_bases, ',
-		'obj_${object_name}_fields, obj_${object_name}_constants},\n'
-	})
+		'obj_${object_name}_fields, obj_${object_name}_constants}'
+	}
+	if rec.register_as_submodule then
+		-- add submodule luaopen function.
+		rec:write_part("luaopen", luaopen_submodule)
+		rec:write_part("luaopen_defs",
+			"int luaopen_${module_c_name}_${object_name}(lua_State *L);\n")
+		rec:write_part("submodule_libs",
+			'  { "${module_c_name}.${object_name}", luaopen_${module_c_name}_${object_name} },\n')
+		-- add submodule type info.
+		rec:write_part("submodule_regs",
+			"static const obj_type_reg submodule_${object_name}_reg =\n")
+		rec:write_part("submodule_regs", object_reg_info)
+		rec:write_part("submodule_regs", ";\n")
+	else
+		rec:write_part("obj_type_regs", object_reg_info)
+		rec:write_part("obj_type_regs", ",\n")
+	end
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "src" })
 	-- combine reg arrays into one part.
@@ -848,7 +949,8 @@ object_end = function(self, rec, parent)
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
 	local parts = {"funcdefs", "methods", "obj_type_ids", "obj_types",
-		"reg_arrays", "obj_type_regs", "extra_code"}
+		"reg_arrays", "obj_type_regs", "submodule_regs", "submodule_libs",
+		"luaopen_defs", "luaopen", "extra_code"}
 	rec:vars_parts(parts)
 	-- copy parts to parent
 	parent:copy_parts(rec, parts)
@@ -1289,6 +1391,9 @@ local function src_write(...)
 	src_file:write(...)
 end
 
+-- write header
+src_write(generated_output_header)
+
 -- write includes
 src_write[[
 #include "lua.h"
@@ -1310,6 +1415,9 @@ for name,mod in pairs(parsed._modules_out) do
 			"methods",
 			"reg_arrays",
 			"obj_type_regs",
+			"submodule_regs",
+			"luaopen_defs",
+			"submodule_libs",
 			"luaopen"
 			}, "\n\n")
 	)

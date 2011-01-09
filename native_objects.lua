@@ -197,6 +197,14 @@ function object(name)
 end
 end
 
+function submodule(name)
+	return function (rec)
+	rec = object(name)(rec)
+	rec.register_as_submodule = true
+	return rec
+end
+end
+
 function package(name)
 	return function (rec)
 	rec = object(name)(rec)
