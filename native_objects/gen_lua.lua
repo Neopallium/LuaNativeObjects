@@ -1353,6 +1353,8 @@ var_in = function(self, rec, parent)
 	if rec.c_type == 'lua_State *' and rec.name == 'L' then return end
 	-- register variable for code gen (i.e. so ${var_name} is replaced with true variable name).
 	parent:add_rec_var(rec)
+	-- don't generate code for '<any>' type parameters
+	if rec.c_type == '<any>' then return end
 
 	local lua = rec.c_type_rec
 	if rec.is_this and parent.__gc then
@@ -1371,8 +1373,14 @@ var_in = function(self, rec, parent)
 			})
 		end
 		-- check lua value matches type.
+		local get
+		if rec.is_optional then
+			get = lua:_opt(rec, rec.default)
+		else
+			get = lua:_check(rec)
+		end
 		parent:write_part("pre",
-			{'  ', rec.c_type, lua:_check(rec) })
+			{'  ', rec.c_type, get })
 	end
 	-- is a lua reference.
 	if lua.is_ref then
@@ -1388,6 +1396,11 @@ var_out = function(self, rec, parent)
 	end
 	-- register variable for code gen (i.e. so ${var_name} is replaced with true variable name).
 	parent:add_rec_var(rec)
+	-- don't generate code for '<any>' type parameters
+	if rec.c_type == '<any>' then
+		parent.pushed_values = parent.pushed_values + 1
+		return
+	end
 
 	local lua = rec.c_type_rec
 	if lua.lang_type == 'string' and rec.has_length then

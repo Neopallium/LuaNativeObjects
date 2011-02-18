@@ -61,10 +61,12 @@ basetype "void"           "nil"
 print"============ create Lua to/check/push/delete methods ================="
 local lua_base_types = {
 	['nil'] = { push = 'lua_pushnil' },
-	['number'] = { to = 'lua_tonumber', check = 'luaL_checknumber', push = 'lua_pushnumber' },
-	['integer'] = { to = 'lua_tointeger', check = 'luaL_checkinteger', push = 'lua_pushinteger' },
-	['string'] = { to = 'lua_tolstring', check = 'luaL_checklstring', push = 'lua_pushstring',
-		push_len = 'lua_pushlstring' },
+	['number'] = { to = 'lua_tonumber', opt = 'luaL_optnumber', check = 'luaL_checknumber',
+		push = 'lua_pushnumber' },
+	['integer'] = { to = 'lua_tointeger', opt = 'luaL_optinteger', check = 'luaL_checkinteger',
+		push = 'lua_pushinteger' },
+	['string'] = { to = 'lua_tolstring', opt = 'luaL_optlstring', check = 'luaL_checklstring',
+		push = 'lua_pushstring', push_len = 'lua_pushlstring' },
 	['boolean'] = { to = 'lua_toboolean', check = 'lua_toboolean', push = 'lua_pushboolean' },
 	['thread'] = { to = 'lua_tothread', check = 'lua_tothread', push = 'lua_pushthread' },
 	['lightuserdata'] =
@@ -84,12 +86,27 @@ process_records{
 					return ' ${' .. var.name .. '} = ' ..
 						l_type.check .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '}_len));\n'
 				end
+				rec._opt = function(self, var, default)
+					if default then
+						default = '"' .. default .. '"'
+					else
+						default = 'NULL'
+					end
+					return ' ${' .. var.name .. '} = ' ..
+						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default ..
+						',&(${' .. var.name .. '}_len));\n'
+				end
 			else
 				rec._to = function(self, var)
 					return ' ${' .. var.name .. '} = ' .. l_type.to .. '(L,${' .. var.name .. '::idx});\n'
 				end
 				rec._check = function(self, var)
 					return ' ${' .. var.name .. '} = ' .. l_type.check .. '(L,${' .. var.name .. '::idx});\n'
+				end
+				rec._opt = function(self, var, default)
+					default = default or '0'
+					return ' ${' .. var.name .. '} = ' ..
+						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default .. ');\n'
 				end
 			end
 			rec._push = function(self, var)
