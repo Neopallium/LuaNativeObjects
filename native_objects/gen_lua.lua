@@ -124,15 +124,16 @@ typedef struct obj_field {
 	uint32_t        flags;  /**< is_writable:1bit */
 } obj_field;
 
-typedef struct obj_type_reg {
+typedef struct reg_sub_module {
 	obj_type        *type;
+	int             is_package;
 	const luaL_reg  *pub_funcs;
 	const luaL_reg  *methods;
 	const luaL_reg  *metas;
 	const obj_base  *bases;
 	const obj_field *fields;
 	const obj_const *constants;
-} obj_type_reg;
+} reg_sub_module;
 
 #define OBJ_UDATA_FLAG_OWN (1<<0)
 #define OBJ_UDATA_FLAG_LOOKUP (1<<1)
@@ -460,11 +461,52 @@ static int obj_constructor_call_wrapper(lua_State *L) {
 	return lua_gettop(L);
 }
 
-static void obj_type_register(lua_State *L, const obj_type_reg *type_reg) {
+static void obj_type_register_constants(lua_State *L, const obj_const *constants, int tab_idx) {
+	/* register constants. */
+	while(constants->name != NULL) {
+		lua_pushstring(L, constants->name);
+		switch(constants->type) {
+		case CONST_BOOLEAN:
+			lua_pushboolean(L, constants->num != 0.0);
+			break;
+		case CONST_NUMBER:
+			lua_pushnumber(L, constants->num);
+			break;
+		case CONST_STRING:
+			lua_pushstring(L, constants->str);
+			break;
+		default:
+			lua_pushnil(L);
+			break;
+		}
+		lua_rawset(L, tab_idx - 2);
+		constants++;
+	}
+}
+
+static void obj_type_register_package(lua_State *L, const reg_sub_module *type_reg) {
+	obj_type *type = type_reg->type;
+	const luaL_reg *reg_list = type_reg->pub_funcs;
+
+	/* create public functions table. */
+	if(reg_list != NULL && reg_list[0].name != NULL) {
+		/* register functions */
+		luaL_register(L, NULL, reg_list);
+	}
+
+	obj_type_register_constants(L, type_reg->constants, -1);
+
+	lua_pop(L, 1);  /* drop package table */
+}
+
+static void obj_type_register(lua_State *L, const reg_sub_module *type_reg) {
 	const luaL_reg *reg_list;
 	obj_type *type = type_reg->type;
 	const obj_base *base = type_reg->bases;
-	const obj_const *constants = type_reg->constants;
+
+	if(type_reg->is_package == 1) {
+		return obj_type_register_package(L, type_reg);
+	}
 
 	/* create public functions table. */
 	reg_list = type_reg->pub_funcs;
@@ -509,26 +551,7 @@ static void obj_type_register(lua_State *L, const obj_type_reg *type_reg) {
 		base++;
 	}
 
-	/* add obj_constants to metatable. */
-	while(constants->name != NULL) {
-		lua_pushstring(L, constants->name);
-		switch(constants->type) {
-		case CONST_BOOLEAN:
-			lua_pushboolean(L, constants->num != 0.0);
-			break;
-		case CONST_NUMBER:
-			lua_pushnumber(L, constants->num);
-			break;
-		case CONST_STRING:
-			lua_pushstring(L, constants->str);
-			break;
-		default:
-			lua_pushnil(L);
-			break;
-		}
-		lua_rawset(L, -4);
-		constants++;
-	}
+	obj_type_register_constants(L, type_reg->constants, -2);
 
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -3);               /* dup methods table */
@@ -627,10 +650,13 @@ static void create_object_instance_cache(lua_State *L) {
 
 local luaopen_main = [[
 int luaopen_${module_c_name}(lua_State *L) {
-	const obj_type_reg *reg = obj_type_regs;
+	const reg_sub_module *reg = reg_sub_modules;
 	const luaL_Reg *submodules = submodule_libs;
 	/* module table. */
 	luaL_register(L, "${module_name}", ${module_c_name}_function);
+
+	/* register module constants. */
+	obj_type_register_constants(L, ${module_c_name}_constants, -1);
 
 	/* create object cache. */
 	create_object_instance_cache(L);
@@ -659,7 +685,7 @@ int luaopen_${module_c_name}(lua_State *L) {
 
 local luaopen_submodule = [[
 int luaopen_${module_c_name}_${object_name}(lua_State *L) {
-	const obj_type_reg *reg = &(submodule_${object_name}_reg);
+	const reg_sub_module *reg = &(submodule_${object_name}_reg);
 	const luaL_Reg null_reg_list = { NULL, NULL };
 
 	/* create object cache. */
@@ -685,6 +711,21 @@ local lua_meta_methods = {
 __str__ = '__tostring',
 __eq__ = '__eq',
 delete = '__gc',
+-- Lua metamethods
+__add = '__add',
+__sub = '__sub',
+__mul = '__mul',
+__div = '__div',
+__mod = '__mod',
+__pow = '__pow',
+__unm = '__unm',
+__len = '__len',
+__concat = '__concat',
+__eq = '__eq',
+__lt = '__lt',
+__le = '__le',
+__gc = '__gc',
+__tostring = '__tostring',
 }
 
 local function add_constant(rec, constant)
@@ -734,8 +775,8 @@ c_module = function(self, rec, parent)
 	self._modules_out[rec.name] = rec
 	rec:write_part("typedefs", obj_udata_types)
 	-- start obj_type array
-	rec:write_part("obj_type_regs",
-		{'static const obj_type_reg obj_type_regs[] = {\n'})
+	rec:write_part("reg_sub_modules",
+		{'static const reg_sub_module reg_sub_modules[] = {\n'})
 	-- start submodule_libs array
 	rec:write_part("submodule_libs",
 		{'static const luaL_Reg submodule_libs[] = {\n'})
@@ -761,8 +802,8 @@ c_module = function(self, rec, parent)
 end,
 c_module_end = function(self, rec, parent)
 	-- end obj_type array
-	rec:write_part("obj_type_regs", {
-	'  {NULL, NULL, NULL, NULL, NULL, NULL, NULL}\n',
+	rec:write_part("reg_sub_modules", {
+	'  {NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL}\n',
 	'};\n\n'
 	})
 	-- end submodule_libs array
@@ -770,11 +811,23 @@ c_module_end = function(self, rec, parent)
 	'  {NULL, NULL}\n',
 	'};\n\n'
 	})
-	-- end function ergs
+	-- end function regs
 	rec:write_part(rec.methods_regs, {
 	'  {NULL, NULL}\n',
 	'};\n\n'
 	})
+	-- build constants list
+	rec:write_part("const_regs",
+		{'static const obj_const ${module_c_name}_constants[] = {\n'})
+	-- add constants
+	for _,const in pairs(rec.constants) do
+		add_constant(rec, const)
+	end
+	rec:write_part("const_regs", {
+	'  {NULL, NULL, 0.0 , 0}\n',
+	'};\n\n'
+	})
+
 	-- add main luaopen function.
 	rec:write_part("luaopen", luaopen_main)
 	rec:write_part("helper_funcs", objHelperFunc)
@@ -785,7 +838,7 @@ c_module_end = function(self, rec, parent)
 		"function_regs", "methods_regs", "metas_regs", "base_regs", "field_regs", "const_regs"}
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = {"funcdefs", "obj_type_regs", "submodule_regs", "submodule_libs", "helper_funcs",
+	local parts = {"funcdefs", "reg_sub_modules", "submodule_regs", "submodule_libs", "helper_funcs",
 		"extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
 	rec:vars_parts(parts)
 
@@ -822,21 +875,23 @@ end,
 object = function(self, rec, parent)
 	rec:add_var('object_name', rec.name)
 	-- make luaL_reg arrays for this object
-	rec:write_part("metas_regs",
-		{'static const luaL_reg obj_${object_name}_metas[] = {\n'})
-	rec:write_part("base_regs",
-		{'static const obj_base obj_${object_name}_bases[] = {\n'})
-	rec:write_part("field_regs",
-		{'static const obj_field obj_${object_name}_fields[] = {\n'})
+	if not rec.is_package then
+		rec:write_part("metas_regs",
+			{'static const luaL_reg obj_${object_name}_metas[] = {\n'})
+		rec:write_part("base_regs",
+			{'static const obj_base obj_${object_name}_bases[] = {\n'})
+		rec:write_part("field_regs",
+			{'static const obj_field obj_${object_name}_fields[] = {\n'})
+		-- where we want the module function registered.
+		rec.methods_regs = 'methods_regs'
+		rec:write_part(rec.methods_regs,
+			{'static const luaL_reg obj_${object_name}_methods[] = {\n'})
+	end
 	rec:write_part("const_regs",
 		{'static const obj_const obj_${object_name}_constants[] = {\n'})
 	rec.functions_regs = 'pub_funcs_regs'
 	rec:write_part("pub_funcs_regs",
 		{'static const luaL_reg obj_${object_name}_pub_funcs[] = {\n'})
-	-- where we want the module function registered.
-	rec.methods_regs = 'methods_regs'
-	rec:write_part(rec.methods_regs,
-		{'static const luaL_reg obj_${object_name}_methods[] = {\n'})
 end,
 object_end = function(self, rec, parent)
 	-- check for dyn_caster
@@ -875,36 +930,38 @@ object_end = function(self, rec, parent)
 		{'static obj_type ', rec._obj_type_name,
 		' = { ', dyn_caster, ', ', rec._obj_id ,
 		', ',flags,', "${object_name}" };\n'})
-	-- check if object has a '__str__' method.
-	if rec.functions['__str__'] == nil then
-		rec:write_part('metas_regs',
-			{'  {"__tostring", ',obj_type_equal_tostring[ud_type],'_tostring},\n'})
+	if not rec.is_package then
+		-- check if object has a '__str__' method.
+		if rec.functions['__str__'] == nil and rec.functions['__tostring'] == nil then
+			rec:write_part('metas_regs',
+				{'  {"__tostring", ',obj_type_equal_tostring[ud_type],'_tostring},\n'})
+		end
+		if rec.functions['__eq__'] == nil and rec.functions['__eq'] == nil then
+			rec:write_part('metas_regs',
+				{'  {"__eq", ',obj_type_equal_tostring[ud_type],'_equal},\n'})
+		end
+		-- finish luaL_reg arrays for this object
+		rec:write_part("methods_regs", {
+		'  {NULL, NULL}\n',
+		'};\n\n'
+		})
+		rec:write_part("metas_regs", {
+		'  {NULL, NULL}\n',
+		'};\n\n'
+		})
+		rec:write_part("base_regs", {
+		'  {-1, NULL}\n',
+		'};\n\n'
+		})
+		-- add fields
+		for _,field in pairs(rec.fields) do
+			add_field(rec, field)
+		end
+		rec:write_part("field_regs", {
+		'  {NULL, 0, 0, 0}\n',
+		'};\n\n'
+		})
 	end
-	if rec.functions['__eq__'] == nil then
-		rec:write_part('metas_regs',
-			{'  {"__eq", ',obj_type_equal_tostring[ud_type],'_equal},\n'})
-	end
-	-- finish luaL_reg arrays for this object
-	rec:write_part("methods_regs", {
-	'  {NULL, NULL}\n',
-	'};\n\n'
-	})
-	rec:write_part("metas_regs", {
-	'  {NULL, NULL}\n',
-	'};\n\n'
-	})
-	rec:write_part("base_regs", {
-	'  {-1, NULL}\n',
-	'};\n\n'
-	})
-	-- add fields
-	for _,field in pairs(rec.fields) do
-		add_field(rec, field)
-	end
-	rec:write_part("field_regs", {
-	'  {NULL, 0, 0, 0}\n',
-	'};\n\n'
-	})
 	-- add constants
 	for _,const in pairs(rec.constants) do
 		add_constant(rec, const)
@@ -918,11 +975,23 @@ object_end = function(self, rec, parent)
 	'};\n\n'
 	})
 	-- add obj_type to register array.
-	local object_reg_info = {
-	'  { &(', rec._obj_type_name, '), obj_${object_name}_pub_funcs, obj_${object_name}_methods, ',
-		'obj_${object_name}_metas, obj_${object_name}_bases, ',
-		'obj_${object_name}_fields, obj_${object_name}_constants}'
-	}
+	local type_info_ptr = '&(' .. rec._obj_type_name .. ')'
+	if rec.is_mod_global then
+		type_info_ptr = 'NULL'
+	end
+	local object_reg_info
+	if rec.is_package then
+		object_reg_info = {
+		'  { ', type_info_ptr, ', 1, obj_${object_name}_pub_funcs, NULL, ',
+			'NULL, NULL, NULL, obj_${object_name}_constants}'
+		}
+	else
+		object_reg_info = {
+		'  { ', type_info_ptr, ', 0, obj_${object_name}_pub_funcs, obj_${object_name}_methods, ',
+			'obj_${object_name}_metas, obj_${object_name}_bases, ',
+			'obj_${object_name}_fields, obj_${object_name}_constants}'
+		}
+	end
 	if rec.register_as_submodule then
 		-- add submodule luaopen function.
 		rec:write_part("luaopen", luaopen_submodule)
@@ -932,12 +1001,12 @@ object_end = function(self, rec, parent)
 			'  { "${module_c_name}.${object_name}", luaopen_${module_c_name}_${object_name} },\n')
 		-- add submodule type info.
 		rec:write_part("submodule_regs",
-			"static const obj_type_reg submodule_${object_name}_reg =\n")
+			"static const reg_sub_module submodule_${object_name}_reg =\n")
 		rec:write_part("submodule_regs", object_reg_info)
 		rec:write_part("submodule_regs", ";\n")
 	else
-		rec:write_part("obj_type_regs", object_reg_info)
-		rec:write_part("obj_type_regs", ",\n")
+		rec:write_part("reg_sub_modules", object_reg_info)
+		rec:write_part("reg_sub_modules", ",\n")
 	end
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "src" })
@@ -949,7 +1018,7 @@ object_end = function(self, rec, parent)
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
 	local parts = {"funcdefs", "methods", "obj_type_ids", "obj_types",
-		"reg_arrays", "obj_type_regs", "submodule_regs", "submodule_libs",
+		"reg_arrays", "reg_sub_modules", "submodule_regs", "submodule_libs",
 		"luaopen_defs", "luaopen", "extra_code"}
 	rec:vars_parts(parts)
 	-- copy parts to parent
@@ -994,10 +1063,10 @@ define = function(self, rec, parent)
 	self._cur_module:write_part("defines", { '#define ', rec.name, ' ', rec.value, '\n' })
 end,
 extends = function(self, rec, parent)
+	assert(not parent.is_package, "A Package can't extend anything: package=" .. parent.name)
 	local base = rec.base
 	local base_cast = 'NULL'
 	if base == nil then return end
---print(rec.name, ' extends ', base.name)
 	-- add methods/fields/constants from base object
 	for name,val in pairs(base.name_map) do
 		-- make sure sub-class has not override name.
@@ -1183,6 +1252,8 @@ end,
 c_function = function(self, rec, parent)
 	local c_name = parent.name .. '__' .. rec.name
 	if rec._is_method then
+		assert(not rec.is_package,
+			"Package's can't have methods: package=" .. parent.name .. ", method=" .. rec.name)
 		c_name = c_name .. '__meth'
 	else
 		c_name = c_name .. '__func'
@@ -1274,8 +1345,8 @@ c_function_end = function(self, rec, parent)
 	self._cur_module:write_part('methods', rec:dump_parts(parts))
 end,
 c_source = function(self, rec, parent)
-	parent:write_part("src", rec.src)
-	parent:write_part("src", "\n")
+	parent:write_part(rec.part, rec.src)
+	parent:write_part(rec.part, "\n")
 end,
 var_in = function(self, rec, parent)
 	-- no need to add code for 'lua_State *' parameters.
@@ -1414,7 +1485,7 @@ for name,mod in pairs(parsed._modules_out) do
 			"extra_code",
 			"methods",
 			"reg_arrays",
-			"obj_type_regs",
+			"reg_sub_modules",
 			"submodule_regs",
 			"luaopen_defs",
 			"submodule_libs",

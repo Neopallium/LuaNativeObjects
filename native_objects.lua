@@ -206,6 +206,13 @@ end
 end
 
 function package(name)
+	if type(name) == 'table' then
+		local rec = name
+		rec = object('_MOD_GLOBAL_')(rec)
+		rec.is_package = true
+		rec.is_mod_global = true
+		return rec
+	end
 	return function (rec)
 	rec = object(name)(rec)
 	rec.is_package = true
@@ -320,6 +327,21 @@ end
 local meta_methods = {
 __str__ = true,
 __eq__ = true,
+-- Lua metamethods
+__add = true,
+__sub = true,
+__mul = true,
+__div = true,
+__mod = true,
+__pow = true,
+__unm = true,
+__len = true,
+__concat = true,
+__eq = true,
+__lt = true,
+__le = true,
+__gc = true,
+__tostring = true,
 }
 function method(name)
 	return function (rec)
@@ -384,10 +406,17 @@ function define(name)
 end
 end
 
-function c_source(src)
+function c_source(part)
+	return function(src)
+	if src == nil then
+		src = part
+		part = nil
+	end
 	rec = make_record({}, "c_source")
+	rec.part = part or "src"
 	rec.src = src
 	return rec
+end
 end
 
 function c_call(ret)
@@ -630,12 +659,12 @@ local function process_module_file(file)
 		local c_type = rec.c_type
 		parent:add_record(method(name) {
 			var_out{c_type , "field"},
-			c_source {"\t${field} = ${this}->", name,";\n" },
+			c_source 'src' {"\t${field} = ${this}->", name,";\n" },
 		})
 		if rec.is_writable then
 			parent:add_record(method("set_" .. name) {
 				var_in{c_type , "field"},
-				c_source {"\t${this}->", name," = ${field};\n" },
+				c_source 'src' {"\t${this}->", name," = ${field};\n" },
 			})
 		end
 	end,
@@ -849,7 +878,7 @@ local function process_module_file(file)
 		end
 		src[#src+1] = ");"
 		-- create "c_source" record.
-		parent:add_record(c_source(src))
+		parent:add_record(c_source "src" (src))
 		-- we don't need this "c_call" record any more.
 		rec._rec_type = nil
 	end,
