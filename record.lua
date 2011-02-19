@@ -474,6 +474,11 @@ end
 local path_char = package.config:sub(1,1)
 local path_match = '(.*)' .. path_char
 local path_stack = {''}
+function subfile_path(filename)
+	local level = #path_stack
+	local cur_path = path_stack[level] or ''
+	return cur_path .. filename
+end
 function subfiles(files)
 	local level = #path_stack
 	local cur_path = path_stack[level]

@@ -595,6 +595,13 @@ function ffi_cdef(cdefs)
 	return rec
 end
 
+function ffi_files(rec)
+	for i,file in ipairs(rec) do
+		rec[i] = subfile_path(file)
+	end
+	return make_record(rec, "ffi_files")
+end
+
 function ffi_source(part)
 	return function(src)
 	if src == nil then
@@ -686,6 +693,13 @@ local function process_module_file(file)
 		-- re-map c_types
 		new_c_type(rec.name, rec)
 		new_c_type(rec.c_type, rec)
+	end,
+	ffi_files = function(self, rec, parent)
+		for _,file in ipairs(rec) do
+			file = assert(io.open(file, "r"))
+			parent:add_record(ffi_source(rec.part)(file:read("*a")))
+			file:close()
+		end
 	end,
 	unknown = function(self, rec, parent)
 		-- re-map c_types
