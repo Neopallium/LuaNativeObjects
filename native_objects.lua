@@ -585,6 +585,51 @@ function lang(name)
 	end
 end
 
+function ffi(rec)
+	return make_record(rec, "ffi")
+end
+
+function ffi_cdef(cdefs)
+	rec = make_record({}, "ffi_cdef")
+	rec.cdefs = cdefs
+	return rec
+end
+
+function ffi_source(part)
+	return function(src)
+	if src == nil then
+		src = part
+		part = nil
+	end
+	rec = make_record({}, "ffi_source")
+	rec.part = part or "ffi_src"
+	rec.src = src
+	return rec
+end
+end
+
+function ffi_call(ret)
+	return function (cfunc)
+	return function (params)
+	rec = make_record({}, "ffi_call")
+	-- parse return c_type.
+	rec.ret = ret
+	if rec.ret == nil then
+		rec.ret = "void"
+	end
+	-- parse c function to call.
+	rec.cfunc = cfunc
+	-- parse params
+	rec.params = params
+	if rec.params == nil then rec.params = {} end
+	return rec
+end
+end
+end
+
+--
+-- End records functions
+--
 
 local module_file = nil
 local outpath = ""

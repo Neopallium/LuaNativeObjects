@@ -53,7 +53,9 @@ basetype "char *"         "string" "NULL"
 basetype "unsigned char *" "string" "NULL"
 basetype "void *"         "lightuserdata" "NULL"
 basetype "lua_State *"    "thread" "NULL"
-basetype "void"           "nil"
+basetype "void"           "nil" "NULL"
+
+basetype "<any>"          "nil" "NULL"
 
 --
 -- to/check/push/delete methods

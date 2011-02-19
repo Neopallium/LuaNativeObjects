@@ -571,6 +571,20 @@ static FUNC_UNUSED int lua_checktype_ref(lua_State *L, int _index, int _type) {
 	return luaL_ref(L, LUA_REGISTRYINDEX);
 }
 
+#if LUAJIT_FFI
+static int nobj_try_loading_ffi(lua_State *L, const char *ffi_init_code) {
+	int err;
+
+	err = luaL_loadstring(L, ffi_init_code);
+
+	lua_pushvalue(L, -2); /* dup C module's table. */
+	err = lua_pcall(L, 1, 0, 0);
+	if(err) {
+		lua_pop(L, 1); /* pop error message. */
+	}
+	return err;
+}
+#endif
 ]]
 
 -- templates for typed *_check/*_delete/*_push macros.
@@ -679,6 +693,9 @@ int luaopen_${module_c_name}(lua_State *L) {
 		obj_type_register(L, reg);
 	}
 
+#if LUAJIT_FFI
+	nobj_try_loading_ffi(L, ${module_c_name}_ffi_lua_code);
+#endif
 	return 1;
 }
 ]]
@@ -701,6 +718,7 @@ int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	lua_pushvalue(L, -1);            /* dup value. */
 	lua_setglobal(L, reg->type->name);    /* global: <object_name> = <object public API> */
 #endif
+
 	return 1;
 }
 
@@ -760,6 +778,17 @@ end
 local function add_field(rec, field)
 end
 
+local function dump_lua_code_to_c_str(code)
+	-- make Lua code C-safe
+	code = code:gsub('[\n"\\%z]', {
+	['\n'] = "\\n\\\n",
+	['"'] = [[\"]],
+	['\\'] = [[\\]],
+	['\0'] = [[\0]],
+	})
+	return '"\\\n' .. code .. '";'
+end
+
 print"============ Lua bindings ================="
 local parsed = process_records{
 _modules_out = {},
@@ -791,6 +820,9 @@ c_module = function(self, rec, parent)
 	-- hide_meta_info?
 	rec:write_part("defines",
 		{'#define OBJ_DATA_HIDDEN_METATABLE ',(rec.hide_meta_info and 1 or 0),'\n'})
+	-- luajit_ffi?
+	rec:write_part("defines",
+		{'#define LUAJIT_FFI ',(rec.luajit_ffi and 1 or 0),'\n'})
 	-- field access method: obj:field()/obj:set_field() or obj.field
 	rec:write_part("defines",
 		{'#define USE_FIELD_GET_SET_METHODS ',(rec.use_field_get_set_methods and 1 or 0),'\n'})
@@ -831,6 +863,13 @@ c_module_end = function(self, rec, parent)
 	-- add main luaopen function.
 	rec:write_part("luaopen", luaopen_main)
 	rec:write_part("helper_funcs", objHelperFunc)
+	-- encode luajit ffi code
+	if rec.luajit_ffi then
+		local ffi_code = rec:dump_parts{ "ffi_src" }
+		rec:write_part("ffi_code",
+		{'static const char *${module_c_name}_ffi_lua_code = ', dump_lua_code_to_c_str(ffi_code)
+		})
+	end
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "src" })
 	-- combine reg arrays into one part.
@@ -839,22 +878,22 @@ c_module_end = function(self, rec, parent)
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
 	local parts = {"funcdefs", "reg_sub_modules", "submodule_regs", "submodule_libs", "helper_funcs",
-		"extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
+		"ffi_code", "extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
 	rec:vars_parts(parts)
 
 	self._cur_module = nil
 end,
 error_code = function(self, rec, parent)
-	local caster_def = 'static void ' .. rec.func_name ..
+	local func_def = 'static void ' .. rec.func_name ..
 		'(lua_State *L, ' .. rec.name .. ' err)'
-	-- add caster decl.
+	-- add push error function decl.
 	parent:write_part('funcdefs', {
 		'typedef ', rec.c_type, ' ', rec.name, ';\n\n',
-		caster_def, ';\n'
+		func_def, ';\n'
 		})
-	-- start caster function.
-	rec:write_part('src', {caster_def, ' {\n'})
-	-- add C variable to error string to be pushed.
+	-- start push error function.
+	rec:write_part('src', {func_def, ' {\n'})
+	-- add C variable for error string to be pushed.
 	rec:write_part("src",
 		{'  const char *err_str = NULL;\n'})
 end,
@@ -1338,13 +1377,17 @@ c_function_end = function(self, rec, parent)
 	local parts = {"pre", "src", "post"}
 	rec:vars_parts(parts)
 
-	local outs = rec.pushed_values --rec:get_sub_record_count("var_out")
+	local outs = rec.pushed_values
 	rec:write_part("post",
 		{'  return ', outs, ';\n',
 		 '}\n\n'})
 	self._cur_module:write_part('methods', rec:dump_parts(parts))
 end,
 c_source = function(self, rec, parent)
+	parent:write_part(rec.part, rec.src)
+	parent:write_part(rec.part, "\n")
+end,
+ffi_source = function(self, rec, parent)
 	parent:write_part(rec.part, rec.src)
 	parent:write_part(rec.part, "\n")
 end,
@@ -1495,6 +1538,7 @@ for name,mod in pairs(parsed._modules_out) do
 			"funcdefs",
 			"obj_types",
 			"helper_funcs",
+			"ffi_code",
 			"extra_code",
 			"methods",
 			"reg_arrays",
