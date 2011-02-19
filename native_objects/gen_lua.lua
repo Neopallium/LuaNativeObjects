@@ -137,6 +137,7 @@ typedef struct reg_sub_module {
 
 #define OBJ_UDATA_FLAG_OWN (1<<0)
 #define OBJ_UDATA_FLAG_LOOKUP (1<<1)
+#define OBJ_UDATA_LAST_FLAG (OBJ_UDATA_FLAG_LOOKUP)
 typedef struct obj_udata {
 	void     *obj;
 	uint32_t flags;  /**< lua_own:1bit */
@@ -1401,12 +1402,13 @@ var_in = function(self, rec, parent)
 
 	local lua = rec.c_type_rec
 	if rec.is_this and parent.__gc then
+		local flags = '${' .. rec.name .. '}_flags'
 		-- for garbage collect method, check the ownership flag before freeing 'this' object.
 		parent:write_part("pre",
 			{
-			'  int flags = 0;\n',
-			'  ', rec.c_type, lua:_delete(rec, '&(flags)'),
-			'  if(!(flags & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
+			'  int ',flags,' = 0;\n',
+			'  ', rec.c_type, lua:_delete(rec, '&(' .. flags .. ')'),
+			'  if(!(',flags,' & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
 			})
 	elseif lua._rec_type ~= 'callback_func' then
 		if lua.lang_type == 'string' then
@@ -1433,9 +1435,12 @@ var_in = function(self, rec, parent)
 	end
 end,
 var_out = function(self, rec, parent)
-	local own
+	local flags
 	if rec.is_this or rec.own then
-		own = 'OBJ_UDATA_FLAG_OWN'
+		flags = '${' .. rec.name .. '}_flags'
+		parent:write_part("pre",{
+			'  int ',flags,' = OBJ_UDATA_FLAG_OWN;\n'
+		})
 	end
 	-- register variable for code gen (i.e. so ${var_name} is replaced with true variable name).
 	parent:add_rec_var(rec)
@@ -1469,25 +1474,25 @@ var_out = function(self, rec, parent)
 			parent:write_part("post", {
 			'  if(is_error) {\n',
 			'    lua_pushnil(L);\n',
-			'    ', lua:_push(rec, own),
+			'    ', lua:_push(rec, flags),
 			'  } else {\n',
 			'    lua_pushboolean(L, 1);\n',
 			'    lua_pushnil(L);\n',
 			'  }\n',
 			})
 		else
-			parent:write_part("post", { lua:_push(rec, own) })
+			parent:write_part("post", { lua:_push(rec, flags) })
 		end
 	elseif rec.no_nil_on_error ~= true and parent._has_error_code then
 		parent:write_part("post", {
 		'  if(is_error) {\n',
 		'    lua_pushnil(L);\n',
 		'  } else {\n',
-		'  ', lua:_push(rec, own),
+		'  ', lua:_push(rec, flags),
 		'  }\n',
 		})
 	else
-		parent:write_part("post", { lua:_push(rec, own) })
+		parent:write_part("post", { lua:_push(rec, flags) })
 	end
 	parent.pushed_values = parent.pushed_values + push_count
 end,
