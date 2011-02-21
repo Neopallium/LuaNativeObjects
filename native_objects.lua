@@ -320,7 +320,8 @@ function c_function(name)
 	rec.f_type = "function"
 	-- variable lookup
 	rec.get_var = function(self, name)
-		for _,var in ipairs(self) do
+		for i=1,#self do
+			local var = self[i]
 			if is_record(var) and var.name == name then
 				return var
 			end
@@ -700,8 +701,8 @@ function ffi_cdef(cdefs)
 end
 
 function ffi_files(rec)
-	for i,file in ipairs(rec) do
-		rec[i] = subfile_path(file)
+	for i=1,#rec do
+		rec[i] = subfile_path(rec[i])
 	end
 	return make_record(rec, "ffi_files")
 end
@@ -796,8 +797,8 @@ local function process_module_file(file)
 		new_c_type(rec.c_type, rec)
 	end,
 	ffi_files = function(self, rec, parent)
-		for _,file in ipairs(rec) do
-			file = assert(io.open(file, "r"))
+		for i=1,#rec do
+			local file = assert(io.open(rec[i], "r"))
 			parent:add_record(ffi_source(rec.part)(file:read("*a")))
 			file:close()
 		end
@@ -989,23 +990,17 @@ local function process_module_file(file)
 		rec.c_func_name = parent.base_type .. "_".. rec.ref_field .. "_cb"
 		src[#src+1] = rec.c_func_name .. "("
 		-- convert params to "cb_in" records.
-		local first = true
-		local c_type
-		for _,v in ipairs(func_type.params) do
-			if c_type == nil then
-				c_type = v
-			else
-				if first then
-					first = false
-				else
-					src[#src+1] = ", "
-				end
-				-- add cb_in to this rec.
-				local v_in = cb_in{ c_type, v}
-				rec:add_record(v_in)
-				src[#src+1] = c_type .. " ${" .. v_in.name .. "}" 
-				c_type = nil
+		local params = func_type.params
+		for i=1,#params,2 do
+			local c_type = params[i]
+			local name = params[i + 1]
+			if i > 1 then
+				src[#src+1] = ", "
 			end
+			-- add cb_in to this rec.
+			local v_in = cb_in{ c_type, v}
+			rec:add_record(v_in)
+			src[#src+1] = c_type .. " ${" .. v_in.name .. "}" 
 		end
 		src[#src+1] = ")"
 		-- save callback func decl.

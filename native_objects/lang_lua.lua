@@ -82,11 +82,11 @@ process_records{
 			if rec.lang_type == 'string' then
 				rec._to = function(self, var)
 					return ' ${' .. var.name .. '} = ' ..
-						l_type.to .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '}_len));\n'
+						l_type.to .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
 				end
 				rec._check = function(self, var)
 					return ' ${' .. var.name .. '} = ' ..
-						l_type.check .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '}_len));\n'
+						l_type.check .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
 				end
 				rec._opt = function(self, var, default)
 					if default then
@@ -96,7 +96,7 @@ process_records{
 					end
 					return ' ${' .. var.name .. '} = ' ..
 						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default ..
-						',&(${' .. var.name .. '}_len));\n'
+						',&(${' .. var.name .. '_len}));\n'
 				end
 			else
 				rec._to = function(self, var)
@@ -116,7 +116,7 @@ process_records{
 					return
 					'  if(${' .. var.name .. '} == NULL) lua_pushnil(L);' ..
 					'  else ' .. l_type.push_len .. '(L, ${' .. var.name .. '},' ..
-					                                    '${' .. var.name .. '}_len);\n'
+					                                    '${' .. var.name .. '_len});\n'
 				end
 				return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
 			end

@@ -34,7 +34,8 @@ end
 ]]
 print"============ Dump objects ================="
 local function find_ret(rec)
-	for i,v in ipairs(rec) do
+	for i=1,#rec do
+		local v = rec[i]
 		if is_record(v) and v._rec_type == 'var_out' then
 			return v;
 		end

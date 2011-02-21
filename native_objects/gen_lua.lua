@@ -1140,7 +1140,8 @@ extends = function(self, rec, parent)
 	local function build_chain_of_caster_calls(class_name, chain)
 		local prev_class = class_name
 		local caster_calls = {}
-		for _,caster in ipairs(chain) do
+		for i=1,#chain do
+			local caster = chain[i]
 			local base_name = caster.base.name
 			-- only need to call custom casters.
 			if caster.cast_type ~= 'direct' then

@@ -30,7 +30,8 @@ function clear_all_records()
 	root_records={}
 	record_type_groups={}
 	-- run clear functions
-	for i,func in ipairs(clear_funcs) do
+	for i=1,#clear_funcs do
+		local func = clear_funcs[i]
 		func()
 	end
 	global_scope={}
@@ -92,7 +93,8 @@ vars_parts = function(self, parts)
 	local out={}
 	parts = self:parts(parts)
 	-- apply variables to all "parts".
-	for _,part in ipairs(parts) do
+	for i=1,#parts do
+		local part = parts[i]
 		local d = self:vars_part(part)
 		out[#out+1] = d
 	end
@@ -127,7 +129,8 @@ dump_parts = function(self, parts, sep)
 	parts = self:parts(parts)
 	-- return all parts listed in "parts".
 	local data = self._data_parts
-	for _,part in ipairs(parts) do
+	for i=1,#parts do
+		local part = parts[i]
 		local d_part=data[part]
 		if d_part then
 			tappend(out, d_part)
@@ -141,7 +144,8 @@ end,
 -- copy parts from "src" record.
 copy_parts = function(self, src, parts)
 	parts = src:parts(parts)
-	for _,part in ipairs(parts) do
+	for i=1,#parts do
+		local part = parts[i]
 		self:write_part(part, src:dump_parts(part))
 	end
 end,
@@ -177,8 +181,8 @@ end,
 make_sub_record = function(self, parent)
 	local root_idx
 	-- find record in roots list
-	for idx,rec in ipairs(root_records) do
-		if rec == self then
+	for idx=1,#root_records do
+		if root_records[idx] == self then
 			root_idx = idx
 			break
 		end
@@ -228,7 +232,8 @@ delete_record = function(self)
 		self._parent:remove_record(self)
 	end
 	-- delete sub-records
-	for i,sub in ipairs(self) do
+	for i=1,#self do
+		local sub = self[i]
 		if is_record(sub) and sub._parent == self then
 			self[i] = nil
 			sub:delete_record()
@@ -249,7 +254,8 @@ copy_record = function(self)
 	end
 	rawset(copy, "_parent", nil) -- unlink from old parent
 	-- copy sub-records
-	for i,sub in ipairs(copy) do
+	for i=1,#copy do
+		local sub = copy[i]
 		if is_record(sub) then
 			local sub_copy = sub:copy_record()
 			rawset(copy, i, sub_copy)
@@ -287,7 +293,9 @@ get_symbol = function(self, name)
 	end
 	-- next check the imports for the symbol
 	if obj == nil then
-		for _,import in ipairs(self._imports) do
+		local imports = self._imports
+		for i=1,#imports do
+			local import = imports[i]
 			obj = import:get_symbol(name)
 			if obj ~= nil then
 				break
@@ -324,7 +332,8 @@ local function remove_child_records_from_roots(rec, seen)
 	if seen[rec] then return end
 	seen[rec] = true
 	-- remove from root list.
-	for _,val in ipairs(rec) do
+	for i=1,#rec do
+		local val = rec[i]
 		if is_record(val) then
 			val:make_sub_record(rec)
 		end
@@ -358,7 +367,8 @@ function make_record(rec, rec_type, name, scope)
 	setmetatable(rec, rec_meta)
 
 	-- complete partial child records.
-	for i,val in ipairs(rec) do
+	for i=1,#rec do
+		local val = rec[i]
 		if type(val) == 'function' then
 			val = end_record(val)
 			rec[i] = val
@@ -420,8 +430,8 @@ end
 function process_records(parser)
 	record_parser(parser)
 	-- process each root record
-	for i,rec in ipairs(root_records) do
-		parser(rec)
+	for i=1,#root_records do
+		parser(root_records[i])
 	end
 	return parser
 end
@@ -443,17 +453,19 @@ local default_stages = { "symbol_map", "imports" }
 
 -- run all parser stages.
 function run_stage_parsers()
-	for _,stage in ipairs(stages) do
+	for i=1,#stages do
+		local stage = stages[i]
 		local parsers = stages[stage]
-		for _,parser in ipairs(parsers) do
-			process_records(parser)
+		for x=1,#parsers do
+			process_records(parsers[x])
 		end
 	end
 end
 
 function move_recs(dst, src)
 	-- move records from "rec" to it's parent
-	for k,rec in ipairs(src) do
+	for i=1,#src do
+		local rec = src[i]
 		if is_record(rec) and rec._rec_type ~= "ignore" then
 			src:remove_record(rec) -- remove from src
 			dst:add_record(rec) -- add to dst
@@ -500,7 +512,8 @@ function subfiles(files)
 	root_records={}
 
 	-- process subfiles
-	for _,file in ipairs(files) do
+	for i=1,#files do
+		local file = files[i]
 		-- add current path to file
 		file = cur_path .. file
 		-- seperate file's path from the filename.
@@ -522,8 +535,8 @@ function subfiles(files)
 	end
 	-- move sub-records into new array
 	local rec={}
-	for _,sub in ipairs(root_records) do
-		rec[#rec + 1] = sub
+	for i=1,#root_records do
+		rec[#rec + 1] = root_records[i]
 	end
 
 	-- switch back to previous roots list
@@ -551,8 +564,8 @@ function subfolder(folder)
 	subfolders[#subfolders+1] = folder
 	-- build full path
 	folder = table.concat(subfolders, "/") .. "/"
-	for i,file in ipairs(files) do
-		files[i] = folder .. file
+	for i=1,#files do
+		files[i] = folder .. files[i]
 	end
 	-- use subfile record.
 	local rec = subfiles(files)
