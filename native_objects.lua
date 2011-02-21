@@ -295,6 +295,12 @@ function const(name)
 end
 end
 
+function constants(values)
+	rec = make_record({}, "constants")
+	rec.values = values
+	return rec
+end
+
 function include(file)
 	local rec = {}
 	rec = make_record(rec, "include")
@@ -802,6 +808,12 @@ local function process_module_file(file)
 			parent:add_record(ffi_source(rec.part)(file:read("*a")))
 			file:close()
 		end
+	end,
+	constants = function(self, rec, parent)
+		for key,value in pairs(rec.values) do
+			parent:add_record(const(key)({ value }))
+		end
+		rec._rec_type = nil
 	end,
 	unknown = function(self, rec, parent)
 		-- re-map c_types
