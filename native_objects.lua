@@ -1017,7 +1017,15 @@ local function process_module_file(file)
 		local ret = rec.ret
 		-- convert return type into "var_out" if it's not a "void" type.
 		if ret ~= "void" then
+			local is_this = false
+			-- check if return value is for the "this" value in a constructor.
 			if parent.is_constructor then
+				local this_var = parent.var_map.this
+				if this_var and ret == this_var.c_type then
+					is_this = true
+				end
+			end
+			if is_this then
 				src[#src+1] = "  ${this} = "
 			else
 				local rc
