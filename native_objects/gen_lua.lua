@@ -1338,17 +1338,6 @@ c_function = function(self, rec, parent)
 			{ '  ', wrap_type,' *wrap;\n',
 			})
 	end
-	-- add error handling code
-	local error_code = rec._has_error_code
-	if error_code then
-		local err_type = error_code.c_type_rec
-		rec:write_part("pre",
-			{ '  int is_error = 0;\n',
-			})
-		rec:write_part("post",
-			{ '  is_error = ', err_type.is_error_check(error_code) ,';\n',
-			})
-	end
 end,
 c_function_end = function(self, rec, parent)
 	-- is this a wrapper function
@@ -1402,7 +1391,9 @@ var_in = function(self, rec, parent)
 
 	local lua = rec.c_type_rec
 	if rec.is_this and parent.__gc then
-		local flags = '${' .. rec.name .. '}_flags'
+		-- add flags ${var_name_flags} variable
+		parent:add_rec_var(rec, rec.name .. '_flags')
+		local flags = '${' .. rec.name .. '_flags}'
 		-- for garbage collect method, check the ownership flag before freeing 'this' object.
 		parent:write_part("pre",
 			{
@@ -1412,9 +1403,11 @@ var_in = function(self, rec, parent)
 			})
 	elseif lua._rec_type ~= 'callback_func' then
 		if lua.lang_type == 'string' then
+			-- add length ${var_name_len} variable
+			parent:add_rec_var(rec, rec.name .. '_len')
 			-- add a variable to top of function for string's length.
 			parent:write_part("pre",{
-				'  size_t ${', rec.name ,'}_len;\n'
+				'  size_t ${', rec.name ,'_len};\n'
 			})
 		end
 		-- check lua value matches type.
@@ -1437,7 +1430,9 @@ end,
 var_out = function(self, rec, parent)
 	local flags
 	if rec.is_this or rec.own then
-		flags = '${' .. rec.name .. '}_flags'
+		-- add flags ${var_name_flags} variable
+		parent:add_rec_var(rec, rec.name .. '_flags')
+		flags = '${' .. rec.name .. '_flags}'
 		parent:write_part("pre",{
 			'  int ',flags,' = OBJ_UDATA_FLAG_OWN;\n'
 		})
@@ -1452,9 +1447,11 @@ var_out = function(self, rec, parent)
 
 	local lua = rec.c_type_rec
 	if lua.lang_type == 'string' and rec.has_length then
+		-- add length ${var_name_len} variable
+		parent:add_rec_var(rec, rec.name .. '_len')
 		-- the C code will provide the string's length.
 		parent:write_part("pre",{
-			'  size_t ${', rec.name ,'}_len = 0;\n'
+			'  size_t ${', rec.name ,'_len} = 0;\n'
 		})
 	end
 	-- if the variable's type has a default value, then initialize the variable.
@@ -1465,28 +1462,45 @@ var_out = function(self, rec, parent)
 	-- add C variable to hold value to be pushed.
 	parent:write_part("pre",
 		{'  ', rec.c_type, ' ${', rec.name, '}', init, ';\n'})
+	-- if this is a temp. variable, then we are done.
+	if rec.is_temp then
+		return
+	end
 	-- push Lua value onto the stack.
 	local push_count = 1
-	if parent._has_error_code == rec then
-		-- if error_code is the first var_out, then push two values.
+	local error_code = parent._has_error_code
+	if error_code == rec then
+		local err_type = error_code.c_type_rec
+		-- if error_code is the first var_out, then push 'true' to signal no error.
+		-- On error push 'false' and the error message.
 		if rec._rec_idx == 1 then
 			push_count = 2
 			parent:write_part("post", {
-			'  if(is_error) {\n',
-			'    lua_pushnil(L);\n',
+			'  /* check for error. */\n',
+			'  if(',err_type.is_error_check(error_code),') {\n',
+			'    lua_pushboolean(L, 0);\n',
 			'    ', lua:_push(rec, flags),
 			'  } else {\n',
 			'    lua_pushboolean(L, 1);\n',
-			'    lua_pushnil(L);\n',
 			'  }\n',
 			})
 		else
 			parent:write_part("post", { lua:_push(rec, flags) })
 		end
-	elseif rec.no_nil_on_error ~= true and parent._has_error_code then
+	elseif rec.no_nil_on_error ~= true and error_code then
+		local err_type = error_code.c_type_rec
 		parent:write_part("post", {
-		'  if(is_error) {\n',
+		'  if(!',err_type.is_error_check(error_code),') {\n',
+		'  ', lua:_push(rec, flags),
+		'  } else {\n',
 		'    lua_pushnil(L);\n',
+		'  }\n',
+		})
+	elseif rec.is_error_on_null then
+		parent:write_part("post", {
+		'  if(',lua.is_error_check(rec),') {\n',
+		'    lua_pushnil(L);\n',
+		'  ', lua:_push_error(rec),
 		'  } else {\n',
 		'  ', lua:_push(rec, flags),
 		'  }\n',

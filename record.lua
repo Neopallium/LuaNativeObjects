@@ -165,8 +165,9 @@ end,
 add_var = function(self, key, value)
 	self._vars[key] = value
 end,
-add_rec_var = function(self, rec)
-	local name,idx = rec.name, rec._rec_idx
+add_rec_var = function(self, rec, name)
+	local name = name or rec.name
+	local idx = rec._rec_idx
 	self._vars[name] = format_variable(name, idx)
 	self._vars[name .. "::idx"] = idx
 end,
@@ -199,11 +200,22 @@ end,
 add_record = function(self, rec)
 	self:insert_record(rec)
 end,
+replace_record = function(self, old_rec, new_rec)
+	for i=1,#self do
+		local sub = self[i]
+		if sub == old_rec then
+			self[i] = new_rec
+			return
+		end
+	end
+end,
 remove_record = function(self, rec)
-	for i,sub in ipairs(self) do
+	for i=1,#self do
+		local sub = self[i]
 		if sub == rec then
 			rawset(self, i, ignore_record) -- have to insert an empty table in it's place.
 			rawset(sub, "_parent", nil)
+			return
 		end
 	end
 end,
@@ -368,6 +380,7 @@ end
 -- Record parser
 --
 local function record_parser(callbacks, name)
+	name = name or "parse"
 	local function call_meth(self, rec_type, post, rec, parent)
 		local func = self[rec_type .. post]
 		if func == nil then
@@ -377,7 +390,6 @@ local function record_parser(callbacks, name)
 		return func(self, rec, parent)
 	end
 	local seen={}
-	if name == nil then name = "parse" end
 	callbacks = setmetatable(callbacks, {
 	__call = function(self, rec, parent)
 		-- make sure it is a valid record.

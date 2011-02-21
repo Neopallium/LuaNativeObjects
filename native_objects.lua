@@ -193,6 +193,13 @@ function object(name)
 	if rec.no_weak_ref == nil then
 		rec.no_weak_ref = false
 	end
+	-- check if this type generates errors on NULLs
+	if rec.error_on_null then
+		-- create 'is_error_check' code
+		rec.is_error_check = function(rec)
+			return "(NULL == ${" .. rec.name .. "})"
+		end
+	end
 	return rec
 end
 end
@@ -419,23 +426,65 @@ function c_source(part)
 end
 end
 
-function c_call(ret)
-	return function (cfunc)
-	return function (params)
-	rec = make_record({}, "c_call")
-	-- parse return c_type.
-	rec.ret = ret
-	if rec.ret == nil then
-		rec.ret = "void"
+local function strip_variable_tokens(val, tokens)
+	local prefix, val, postfix = val:match("^([!@&*(?#]*)([%w_ *]*)([@?)<>]*[0-9]*)")
+	return prefix .. (tokens or '') .. postfix, val
+end
+
+local function parse_variable_name(var)
+	-- no parsing needed for '<any>'
+	if var.c_type == '<any>' then return end
+	-- strip tokens from variable name & c_type
+	local tokens, name, c_type
+	tokens, name = strip_variable_tokens(var.name)
+	tokens, c_type = strip_variable_tokens(var.c_type, tokens)
+	-- set variable name to stripped name
+	var.name = name
+	var.c_type = c_type
+	-- parse prefix & postfix tokens
+	local n=1
+	local len = #tokens
+	while n <= len do
+		local tok = tokens:sub(n,n)
+		n = n + 1
+		if tok == '*' then
+			assert(var.wrap == nil, "Variable already has a access wrapper.")
+			var.wrap = '*'
+		elseif tok == '&' then
+			assert(var.wrap == nil, "Variable already has a access wrapper.")
+			var.wrap = '&'
+		elseif tok == '#' then
+			var.is_length_ref = true
+		elseif tok == '?' then
+			var.is_optional = true
+			-- eat the rest of the tokens as the default value.
+			if n <= len then
+				var.default = tokens:sub(n)
+			end
+			break
+		elseif tok == '!' then
+			assert(var._rec_type == 'var_out', "Only output variables can be marked as 'owned'.")
+			var.own = true
+		elseif tok == '@' then
+			var.is_ref_field = true
+			error("`@ref_name` not yet supported.")
+		elseif tok == '<' or tok == '>' then
+			local idx = tokens:match('([0-9]*)', n)
+			assert(idx, "Variable already has a stack order 'idx'")
+			var.idx = tonumber(idx)
+			if tok == '>' then
+				-- force this variable to an output type.
+				var._rec_type = 'var_out'
+			else
+				assert(var._rec_type == 'var_in', "Can't make an output variable into an input variable.")
+			end
+			-- skip index value.
+			if idx then n = n + #idx end
+		elseif tok == '(' or tok == ')' then
+			assert(var._rec_type == 'var_out', "Only output variables can be marked as temp. variables.")
+			var.is_temp = true
+		end
 	end
-	-- parse c function to call.
-	rec.cfunc = cfunc
-	-- parse params
-	rec.params = params
-	if rec.params == nil then rec.params = {} end
-	return rec
-end
-end
 end
 
 function var_out(rec)
@@ -444,6 +493,8 @@ function var_out(rec)
 	rec.c_type = table.remove(rec, 1)
 	-- out variable's name
 	rec.name = table.remove(rec, 1)
+	-- parse tags from name.
+	parse_variable_name(rec)
 	resolve_rec(rec)
 	return rec
 end
@@ -454,12 +505,68 @@ function var_in(rec)
 	rec.c_type = table.remove(rec, 1)
 	-- in variable's name
 	rec.name = table.remove(rec, 1)
+	-- parse tags from name.
+	parse_variable_name(rec)
 	resolve_rec(rec)
 	return rec
 end
 
+-- A reference to another var_in/var_out variable.
+-- This is used by `c_call` records.
+function var_ref(var)
+	local rec = {}
+	-- copy details from var_* record
+	for k,v in pairs(var) do rec[k] = v end
+	-- make variable reference.
+	rec = make_record(rec, "var_ref")
+	-- in variable's c_type
+	rec.c_type = var.c_type
+	-- in variable's name
+	rec.name = var.name
+	resolve_rec(rec)
+	return rec
+end
+
+local function return_type_to_var(r_type)
+	local var
+	-- convert return c_type to var_out
+	r_type = r_type or "void"
+	if type(r_type) == 'string' then
+		var = var_out{ r_type, "rc_" .. cfunc }
+	else
+		var = var_out(r_type)
+	end
+	return var
+end
+
+function c_call(return_type)
+	return function (cfunc)
+	return function (params)
+	local rec = make_record({}, "c_call")
+	-- parse return c_type.
+	rec.ret = return_type or "void"
+	-- parse c function to call.
+	rec.cfunc = cfunc
+	-- parse params
+	rec.params = params
+	if rec.params == nil then rec.params = {} end
+	return rec
+end
+end
+end
+
+function c_method_call(ret)
+	return function (cfunc)
+	return function (params)
+	local rec = c_call(ret)(cfunc)(params)
+	rec.is_method_call = true
+	return rec
+end
+end
+end
+
 function callback_type(name)
-	return function (ret)
+	return function (return_type)
 	return function (params)
 	rec = make_record({}, "callback_type")
 	rec.is_callback = true
@@ -468,10 +575,7 @@ function callback_type(name)
 	-- c_type for callback.
 	rec.c_type = name
 	-- parse return c_type.
-	rec.ret = ret
-	if rec.ret == nil then
-		rec.ret = "void"
-	end
+	rec.ret = return_type or "void"
 	-- parse params
 	if params == nil then params = {} end
 	rec.params = params
@@ -615,15 +719,12 @@ function ffi_source(part)
 end
 end
 
-function ffi_call(ret)
+function ffi_call(return_type)
 	return function (cfunc)
 	return function (params)
 	rec = make_record({}, "ffi_call")
 	-- parse return c_type.
-	rec.ret = ret
-	if rec.ret == nil then
-		rec.ret = "void"
-	end
+	rec.ret = return_type or "void"
 	-- parse c function to call.
 	rec.cfunc = cfunc
 	-- parse params
@@ -735,11 +836,13 @@ local function process_module_file(file)
 	process_records{
 	c_function = function(self, rec, parent)
 		if rec._is_method then
+			local var
 			if rec.is_constructor then
-				rec:insert_record(var_out{ parent.c_type, "this", is_this = true }, 1)
+				var = var_out{ parent.c_type, "this", is_this = true }
 			else
-				rec:insert_record(var_in{ parent.c_type, "this", is_this = true }, 1)
+				var = var_in{ parent.c_type, "this", is_this = true }
 			end
+			rec:insert_record(var, 1)
 		end
 	end,
 	}
@@ -859,6 +962,16 @@ local function process_module_file(file)
 				rec.wrapper_obj = parent.wrapper_obj
 			end
 		end
+		-- map names to in/out variables
+		rec.var_map = {}
+		function rec:add_variable(var, name)
+			name = name or var.name
+			local old_var = self.var_map[name]
+			-- add this variable to parent
+			assert(old_var == nil or old_var == var,
+				"duplicate variable " .. name .. " in " .. self.name)
+			self.var_map[name] = var
+		end
 	end,
 	callback_func = function(self, rec, parent)
 		local func_type = rec.c_type_rec
@@ -898,15 +1011,31 @@ local function process_module_file(file)
 		-- save callback func decl.
 		rec.c_func_decl = table.concat(src)
 	end,
+	var_in = function(self, rec, parent)
+		parent:add_variable(rec)
+	end,
+	var_out = function(self, rec, parent)
+		parent:add_variable(rec)
+	end,
 	c_call = function(self, rec, parent)
 		local src={}
+		local ret = rec.ret
 		-- convert return type into "var_out" if it's not a "void" type.
-		if rec.ret ~= "void" then
+		if ret ~= "void" then
 			if parent.is_constructor then
 				src[#src+1] = "  ${this} = "
 			else
-				parent:add_record(var_out{ rec.ret, "ret" })
-				src[#src+1] = "  ${ret} = "
+				local rc
+				if type(ret) == 'string' then
+					rc = var_out{ ret, "rc_" .. rec.cfunc }
+				else
+					rc = var_out(ret)
+				end
+				-- register var_out variable.
+				parent:add_variable(rc)
+				-- add var_out record to parent
+				parent:add_record(rc)
+				src[#src+1] = "  ${" .. rc.name .. "} = "
 			end
 		else
 			src[#src+1] = "  "
@@ -914,32 +1043,138 @@ local function process_module_file(file)
 		-- append c function to call.
 		src[#src+1] = rec.cfunc .. "("
 		-- convert params to "var_in" records.
-		local c_type
-		for _,v in ipairs(rec.params) do
-			if c_type == nil then
-				c_type = v
+		local params = {}
+		local list = rec.params
+		-- check if this `c_call` is a method call
+		if rec.is_method_call then
+			-- then add `this` parameter to call.
+			local this = parent.var_map.this
+			assert(this, "Missing `this` variable for method_call: " .. rec.cfunc)
+			this = var_ref(this)
+			parent:add_record(this)
+			params[1] = this
+		end
+		for i=1,#list,2 do
+			local c_type = list[i]
+			local name = list[i+1]
+			local param = var_in{ c_type, name}
+			name = param.name
+			-- check if this is a new input variable.
+			if not parent.var_map[name] then
+				-- add param as a variable.
+				parent:add_variable(param)
 			else
-				-- add var_in rec to parent.
-				parent:add_record(var_in{ c_type, v})
-				c_type = nil
+				-- variable exists, return this input variable into a reference.
+				local ref = var_ref(param)
+				-- invalidate old `var_in` record
+				param._rec_type = nil
+				param = ref
 			end
+			-- add param rec to parent.
+			parent:add_record(param)
+			params[#params + 1] = param
 		end
 		-- append all input variables to "c_source"
-		local first=true
-		for _,var in ipairs(parent) do
-			if is_record(var) and var._rec_type == "var_in" then
-				if not first then
-					src[#src+1] = ", "
-				end
-				src[#src+1] = "${" .. var.name .. "}" 
-				first = false
+		for i=1,#params do
+			local var = params[i]
+			if i > 1 then
+				src[#src+1] = ", "
+			end
+			local name = var.name
+			if var.is_length_ref then
+				name = "${" .. name .. "_len}"
+			else
+				name = "${" .. name .. "}"
+			end
+			if var.wrap then
+				src[#src+1] = var.wrap .. "("
+				src[#src+1] = name .. ")"
+			else
+				src[#src+1] = name
 			end
 		end
 		src[#src+1] = ");"
-		-- create "c_source" record.
-		parent:add_record(c_source "src" (src))
-		-- we don't need this "c_call" record any more.
-		rec._rec_type = nil
+		-- replace `c_call` with `c_source` record
+		parent:replace_record(rec, c_source("src")(src))
+	end,
+	}
+
+	--
+	-- sort var_in/var_out records.
+	--
+	local function sort_vars(var1, var2)
+		return (var1.idx < var2.idx)
+	end
+	process_records{
+	c_function = function(self, rec, parent)
+		local inputs = {}
+		local in_count = 0
+		local outputs = {}
+		local out_count = 0
+		local misc = {}
+		local max_idx = #rec
+		-- seperate sub-records
+		for i=1,max_idx do
+			local var = rec[i]
+			local var_type = var._rec_type
+			local sort = true
+			local list
+			if var_type == 'var_in' then
+				list = inputs
+				in_count = in_count + 1
+			elseif var_type == 'var_out' then
+				list = outputs
+				out_count = out_count + 1
+			else
+				list = misc
+				sort = false
+			end
+			if sort then
+				local idx = var.idx
+				if idx then
+					-- force index of this variable.
+					local old_var = list[idx]
+					-- variable has a fixed
+					list[idx] = var
+					-- move old variable to next open slot
+					var = old_var
+				end
+				-- place variable in next nil slot.
+				if var then
+					for i=1,max_idx do
+						if not list[i] then
+							-- done, found empty slot
+							list[i] = var
+							var = nil
+							break
+						end
+					end
+				end
+				assert(var == nil, "Failed to find empty slot for variable.")
+			else
+				list[#list + 1] = var
+			end
+		end
+		-- make sure there are no gaps between input/output variables.
+		assert(#inputs == in_count,
+			"Gaps between input variables, check your usage of `<idx` for function: " .. rec.name)
+		assert(#outputs == out_count,
+			"Gaps between output variables, check your usage of `>idx` for function: " .. rec.name)
+
+		-- put sorted sub-records back into the `c_function` record.
+		local idx=0
+		for i=1,in_count do
+			idx = idx + 1
+			rec[idx] = inputs[i]
+		end
+		for i=1,out_count do
+			idx = idx + 1
+			rec[idx] = outputs[i]
+		end
+		for i=1,#misc do
+			idx = idx + 1
+			rec[idx] = misc[i]
+		end
 	end,
 	}
 
@@ -959,6 +1194,9 @@ local function process_module_file(file)
 				"A function/method can only have one var_out with type error_code.")
 			-- mark the function as having an error code.
 			parent._has_error_code = rec
+		elseif var_type.error_on_null then
+			-- if this variable is null then push a nil and error message.
+			rec.is_error_on_null = true
 		end
 	end,
 	}

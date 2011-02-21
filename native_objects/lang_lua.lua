@@ -126,10 +126,11 @@ process_records{
 		local func_name = 'error_code__' .. rec.name .. '__push'
 		rec.func_name = func_name
 
-		-- create _push function
+		-- create _push_error & _push function
 		rec._push = function(self, var)
 			return '  ' .. func_name ..'(L, ${' .. var.name .. '});\n'
 		end
+		rec._push_error = rec._push
 	end,
 	object = function(self, rec, parent)
 		rec.lang_type = 'userdata'
@@ -148,6 +149,11 @@ process_records{
 		rec._push = function(self, var, own)
 			if own == nil then own = '0' end
 			return '  '..type_name..'_push(L, ${'..var.name..'}, '..own..');\n'
+		end
+		if rec.error_on_null then
+			rec._push_error = function(self, var)
+				return '  lua_pushstring(L, ' .. rec.error_on_null .. ');\n'
+			end
 		end
 	end,
 	callback_func = function(self, rec, parent)
