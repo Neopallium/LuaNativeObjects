@@ -204,12 +204,20 @@ end,
 add_record = function(self, rec)
 	self:insert_record(rec)
 end,
+find_record = function(self, rec)
+	for i=1,#self do
+		local sub = self[i]
+		if sub == rec then
+			return i
+		end
+	end
+end,
 replace_record = function(self, old_rec, new_rec)
 	for i=1,#self do
 		local sub = self[i]
 		if sub == old_rec then
 			self[i] = new_rec
-			return
+			return i
 		end
 	end
 end,
@@ -462,13 +470,18 @@ function run_stage_parsers()
 	end
 end
 
-function move_recs(dst, src)
+function move_recs(dst, src, idx)
 	-- move records from "rec" to it's parent
 	for i=1,#src do
 		local rec = src[i]
 		if is_record(rec) and rec._rec_type ~= "ignore" then
 			src:remove_record(rec) -- remove from src
-			dst:add_record(rec) -- add to dst
+			if idx then
+				dst:insert_record(rec, idx) -- insert into dst
+				idx = idx + 1
+			else
+				dst:add_record(rec) -- add to dst
+			end
 		end
 	end
 	-- now delete this empty container record
@@ -549,7 +562,8 @@ end
 -- process some container records
 reg_stage_parser("containers", {
 subfiles = function(self, rec, parent)
-	move_recs(parent, rec)
+	local idx = parent:find_record(rec)
+	move_recs(parent, rec, idx)
 end,
 })
 
