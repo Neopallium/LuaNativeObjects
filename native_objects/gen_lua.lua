@@ -812,6 +812,7 @@ int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 local ffi_helper_code = [===[
 local _M, _priv, udata_new = ...
 
+local d_getmetatable = debug.getmetatable
 local d_setmetatable = debug.setmetatable
 
 -- try loading luajit's ffi
@@ -869,9 +870,8 @@ local obj_udata_size = ffi.sizeof"obj_udata"
 local weak_objects = setmetatable({}, { __mode = "v" })
 
 local function obj_udata_luacheck_internal(obj, type_mt)
-	local obj_mt = getmetatable(obj)
+	local obj_mt = d_getmetatable(obj)
 	if obj_mt == type_mt then
-		-- TODO: obj_udata_is_compatible() check
 		-- convert userdata to cdata.
 		return obj_udata_ptr(obj)
 	end
@@ -946,8 +946,9 @@ local function obj_udata_luapush_weak(obj, type_mt, obj_type, flags)
 	return ud_obj
 end
 
+require"utils"
 local function obj_simple_udata_luacheck(ud_obj, type_mt)
-	local obj_mt = getmetatable(ud_obj)
+	local obj_mt = d_getmetatable(ud_obj)
 	if obj_mt == type_mt then
 		-- convert userdata to cdata.
 		return obj_simple_udata_ptr(ud_obj)
@@ -980,31 +981,49 @@ end
 local ffi_obj_type_check_delete_push = {
 ['simple'] = [[
 local function obj_type_${object_name}_check(ud_obj)
-	return obj_simple_udata_luacheck(ud_obj, ${object_name}_mt)
+	local c_obj = ${object_name}_objects[ud_obj]
+	if c_obj == nil then
+		-- cdata object not in cache
+		c_obj = obj_simple_udata_luacheck(ud_obj, ${object_name}_mt)
+		${object_name}_objects[ud_obj] = c_obj
+	end
+	return c_obj
 end
 
 local function obj_type_${object_name}_delete(ud_obj)
+	${object_name}_objects[ud_obj] = nil
 	return obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
 end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-local function obj_type_${object_name}_push(c_obj, flags)
-	return obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
+local function obj_type_${object_name}_push(c_obj)
+	local ud_obj = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
+	${object_name}_objects[ud_obj] = c_obj
+	return ud_obj
 end
 
 ]],
 ['embed'] = [[
 local function obj_type_${object_name}_check(ud_obj)
-	return obj_simple_udata_luacheck(ud_obj, ${object_name}_mt)
+	local c_obj = ${object_name}_objects[ud_obj]
+	if c_obj == nil then
+		-- cdata object not in cache
+		c_obj = obj_simple_udata_luacheck(ud_obj, ${object_name}_mt)
+		${object_name}_objects[ud_obj] = c_obj
+	end
+	return c_obj
 end
 
 local function obj_type_${object_name}_delete(ud_obj)
+	${object_name}_objects[ud_obj] = nil
 	return obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
 end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-local function obj_type_${object_name}_push(c_obj, flags)
-  return obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
+local function obj_type_${object_name}_push(c_obj)
+	local ud_obj = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
+	${object_name}_objects[ud_obj] = c_obj
+	return ud_obj
 end
 
 ]],
