@@ -1,10 +1,23 @@
 LuaNativeObjects
 ================
 
+This is a bindings generator for Lua & LuaJIT2.  It can be used to generator both standard Lua C API & LuaJIT2 FFI based bindings for C libraries.  Both standard & FFI based bindings are packaged in a single shared library (.so or .dll) file.  When the module is loaded in LuaJIT2 (please use git HEAD version of LuaJIT2 for now) it will try to load the FFI-based bindings in-place of the standard Lua API bindings.
 
+This bindings generator is design to create Object based bindings, instead of simple procedural bindings.  So if you have a C structure (your object) and a set of C functions (your object's methods) that work on that structure, then you can turn them into a nice Lua object.
+
+It is still possible to generator procedural bindings for C functions that don't belong to an object (use a `package` record instead of an `object` record).
+
+
+Lua bindings using this generator
+---------------------------------
+
+* [Lua-zmq](http://github.com/Neopallium/lua-zmq)
+* [Luagit2](http://github.com/Neopallium/luagit2)
 
 Example bindings
 ----------------
+
+	This example bindings code is take from the 'examples' folder.
 
 	-- define the 'gd' module
 	c_module "gd" {
@@ -81,25 +94,27 @@ Example bindings
 		}
 	}
 
-Marking variable
-----------------
+Marking input & output variables
+--------------------------------
+
+The `c_call` & `c_method_call` records have support for annotating the return type and function parameters to control how the generated bindings work.
 
 	c_call "int>1" "func_name"
 	  { "ObjectType1", "&need_pointer_to_pointer_is_out_var_idx2>2", "ClassObject", "this<1" }
 
-`<idx`, mark as an input variable with order `idx` on stack.
+`<idx`, mark as an input parameter from Lua.  The `idx` value controls the order of input parameters.
 
-`>idx`, mark as an output variable with order `idx` on stack.
+`>idx`, mark as an output that will be returned from the function back to Lua.  The `idx` value controls the order of output values as returned to Lua.
 
 `!`, mark will cause owner-ship of an object to transfer between C & Lua.
 For output variables Lua will take owner-ship the object instance and free it when the object's `__gc` is called.
 For input variables Lua will give-up owner-ship of the object and only keep a reference to the object.
 
-`#var`, reference the length of the named variable `var`.
+`#var`, reference the length of the named variable `var`.  This is used for 'string' type input parameters.
+
+`?`, mark the input parameter as optional.
 
 `&`, this will wrap the variable access with `&(var)`.
 
 `*`, this will wrap the variable access with `*(var)`.
-
-`?`, variable is optional use for both input & output values.
 
