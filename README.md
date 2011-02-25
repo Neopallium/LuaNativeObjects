@@ -17,7 +17,7 @@ Lua bindings using this generator
 Example bindings
 ----------------
 
-	This example bindings code is take from the 'examples' folder.
+This example bindings code is take from the 'examples' folder.
 
 	-- define the 'gd' module
 	c_module "gd" {
