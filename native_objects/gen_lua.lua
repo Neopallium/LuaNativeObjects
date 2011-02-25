@@ -39,13 +39,25 @@ local generated_output_header = [[
 
 local obj_udata_types = [[
 
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
+#ifdef _MSC_VER
+
+/* define some types that we need. */
+typedef __int32 int32_t;
+typedef unsigned __int32 uint32_t;
+
+#define FUNC_UNUSED
+
+#else
+
+#include <stdint.h>
+
 #define FUNC_UNUSED __attribute__((unused))
+
+#endif
 
 #if defined(__GNUC__) && (__GNUC__ >= 4)
 #define assert_obj_type(type, obj) \
@@ -283,6 +295,7 @@ static FUNC_UNUSED void *obj_udata_luadelete(lua_State *L, int _index, obj_type 
 }
 
 static FUNC_UNUSED void obj_udata_luapush(lua_State *L, void *obj, obj_type *type, int flags) {
+	obj_udata *ud;
 	/* convert NULL's into Lua nil's. */
 	if(obj == NULL) {
 		lua_pushnil(L);
@@ -293,7 +306,7 @@ static FUNC_UNUSED void obj_udata_luapush(lua_State *L, void *obj, obj_type *typ
 		(type->dcaster)(&obj, &type);
 	}
 	/* create new userdata. */
-	obj_udata *ud = (obj_udata *)lua_newuserdata(L, sizeof(obj_udata));
+	ud = (obj_udata *)lua_newuserdata(L, sizeof(obj_udata));
 	ud->obj = obj;
 	ud->flags = flags;
 	/* get obj_type metatable. */
@@ -813,7 +826,6 @@ if disable_ffi then
 	return
 end
 
----[=========[
 local OBJ_UDATA_FLAG_OWN		= 1
 local OBJ_UDATA_FLAG_LOOKUP	= 2
 local OBJ_UDATA_LAST_FLAG		= OBJ_UDATA_FLAG_LOOKUP
@@ -1956,16 +1968,18 @@ var_out = function(self, rec, parent)
 			'    lua_pushboolean(L, 1);\n',
 			'  }\n',
 			})
-			parent:write_part("ffi_post", {
-			'  -- check for error.\n',
-			'  local ${', rec.name,'}_err\n',
-			'  if ',err_type.ffi_is_error_check(error_code),' then\n',
-			'    ${', rec.name ,'} = false\n',
-			'    ${', rec.name, '}_err = ', lua:_ffi_push(rec, flags),
-			'  else\n',
-			'    ${', rec.name ,'} = true\n',
-			'  end\n',
-			})
+			if err_type.ffi_is_error_check then
+				parent:write_part("ffi_post", {
+				'  -- check for error.\n',
+				'  local ${', rec.name,'}_err\n',
+				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
+				'    ${', rec.name ,'} = false\n',
+				'    ${', rec.name, '}_err = ', lua:_ffi_push(rec, flags),
+				'  else\n',
+				'    ${', rec.name ,'} = true\n',
+				'  end\n',
+				})
+			end
 			parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
 		else
 			parent:write_part("post", { lua:_push(rec, flags) })
@@ -1983,13 +1997,15 @@ var_out = function(self, rec, parent)
 		'    lua_pushnil(L);\n',
 		'  }\n',
 		})
-		parent:write_part("ffi_post", {
-		'  if not ',err_type.ffi_is_error_check(error_code),' then\n',
-		'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags),
-		'  else\n',
-		'    ${', rec.name, '} = nil\n',
-		'  end\n',
-		})
+		if err_type.ffi_is_error_check then
+			parent:write_part("ffi_post", {
+			'  if not ',err_type.ffi_is_error_check(error_code),' then\n',
+			'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags),
+			'  else\n',
+			'    ${', rec.name, '} = nil\n',
+			'  end\n',
+			})
+		end
 		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 	elseif rec.is_error_on_null then
 		parent:write_part("post", {
