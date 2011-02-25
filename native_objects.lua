@@ -728,6 +728,15 @@ function ffi_cdef(cdef)
 	return ffi_source("ffi_cdef")(cdef)
 end
 
+function ffi_load(name)
+	return function (global)
+	if global == nil then global = false end
+	global = tostring(global)
+	local src = 'local C = ffi.load("' .. name .. '",' .. global .. ')\n'
+	return ffi_source("ffi_src")(src)
+end
+end
+
 function ffi_export(c_type)
 	return function (name)
 	rec = make_record({}, "ffi_export")
