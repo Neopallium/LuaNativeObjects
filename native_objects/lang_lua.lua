@@ -197,6 +197,9 @@ process_records{
 			local name = '${' .. var.name .. '}'
 			return '' .. name .. ' = '..type_name..'_check('..name..')\n'
 		end
+		rec._ffi_delete = function(self, var)
+			return 'local ${'..var.name..'},${'..var.name..'_flags} = '..type_name..'_delete(self)\n'
+		end
 		rec._ffi_push = function(self, var, own)
 			if own == nil then own = '0' end
 			return '  '..type_name..'_push(${'..var.name..'}, '..own..')\n'

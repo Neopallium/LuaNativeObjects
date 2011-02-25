@@ -277,13 +277,7 @@ static FUNC_UNUSED void *obj_udata_luacheck(lua_State *L, int _index, obj_type *
 
 static FUNC_UNUSED void *obj_udata_luadelete(lua_State *L, int _index, obj_type *type, int *flags) {
 	void *obj;
-#if OBJ_DATA_HIDDEN_METATABLE
-	obj_udata *ud = obj_udata_toobj(L, _index);
-	(void)type;
-	obj = ud->obj;
-#else
 	obj_udata *ud = obj_udata_luacheck_internal(L, _index, &(obj), type);
-#endif
 	*flags = ud->flags;
 	/* null userdata. */
 	ud->obj = NULL;
@@ -418,12 +412,7 @@ static FUNC_UNUSED void * obj_simple_udata_luacheck(lua_State *L, int _index, ob
 
 static FUNC_UNUSED void * obj_simple_udata_luadelete(lua_State *L, int _index, obj_type *type, int *flags) {
 	void *obj;
-#if OBJ_DATA_HIDDEN_METATABLE
-	obj = obj_simple_udata_toobj(L, _index);
-	(void)type;
-#else
 	obj = obj_simple_udata_luacheck(L, _index, type);
-#endif
 	*flags = OBJ_UDATA_FLAG_OWN;
 	/* clear the metatable to invalidate userdata. */
 	lua_pushnil(L);
@@ -812,6 +801,7 @@ int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 local ffi_helper_code = [===[
 local _M, _priv, udata_new = ...
 
+local band = bit.band
 local d_getmetatable = debug.getmetatable
 local d_setmetatable = debug.setmetatable
 
@@ -1214,6 +1204,7 @@ c_module = function(self, rec, parent)
 	rec:write_part("defines",
 		{'#define REG_OBJECTS_AS_GLOBALS ',(rec.use_globals and 1 or 0),'\n'})
 	-- hide_meta_info?
+	if rec.hide_meta_info == nil then rec.hide_meta_info = true end
 	rec:write_part("defines",
 		{'#define OBJ_DATA_HIDDEN_METATABLE ',(rec.hide_meta_info and 1 or 0),'\n'})
 	-- luajit_ffi?
@@ -1894,6 +1885,11 @@ var_in = function(self, rec, parent)
 			'  int ',flags,' = 0;\n',
 			'  ', rec.c_type, lua:_delete(rec, '&(' .. flags .. ')'),
 			'  if(!(',flags,' & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
+			})
+		parent:write_part("ffi_pre",
+			{
+			'  ', lua:_ffi_delete(rec, '&(' .. flags .. ')'),
+			'  if(band(',flags,',OBJ_UDATA_FLAG_OWN) == 0) then return end\n',
 			})
 	elseif lua._rec_type ~= 'callback_func' then
 		if lua.lang_type == 'string' then
