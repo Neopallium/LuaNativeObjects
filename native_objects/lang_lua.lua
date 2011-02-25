@@ -79,6 +79,9 @@ process_records{
 	basetype = function(self, rec, parent)
 		local l_type = lua_base_types[rec.lang_type]
 		if l_type ~= nil then
+			rec._ffi_push = function(self, var)
+				return '${' .. var.name .. '}\n'
+			end
 			if rec.lang_type == 'string' then
 				rec._to = function(self, var)
 					return ' ${' .. var.name .. '} = ' ..
@@ -98,6 +101,36 @@ process_records{
 						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default ..
 						',&(${' .. var.name .. '_len}));\n'
 				end
+				rec._push = function(self, var)
+					if var.has_length then
+						return
+						'  if(${' .. var.name .. '} == NULL) lua_pushnil(L);' ..
+						'  else ' .. l_type.push_len .. '(L, ${' .. var.name .. '},' ..
+						                                    '${' .. var.name .. '_len});\n'
+					end
+					return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
+				end
+				rec._ffi_push = function(self, var)
+					if var.has_length then
+						return
+						'((nil ~= ${' .. var.name .. '}) and ' ..
+						'ffi.string(${' .. var.name .. '},${' .. var.name .. '_len}))\n'
+					end
+					return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
+				end
+				rec._ffi_check = function(self, var)
+					return 'local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
+				end
+				rec._ffi_opt = function(self, var, default)
+					if default then
+						default = (' or %q'):format(tostring(default))
+					else
+						default = ''
+					end
+					return 
+						'${' .. var.name .. '} = ${' .. var.name .. '}' .. default .. '\n' ..
+						'  local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
+				end
 			else
 				rec._to = function(self, var)
 					return ' ${' .. var.name .. '} = ' .. l_type.to .. '(L,${' .. var.name .. '::idx});\n'
@@ -110,15 +143,17 @@ process_records{
 					return ' ${' .. var.name .. '} = ' ..
 						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default .. ');\n'
 				end
-			end
-			rec._push = function(self, var)
-				if var.has_length then
-					return
-					'  if(${' .. var.name .. '} == NULL) lua_pushnil(L);' ..
-					'  else ' .. l_type.push_len .. '(L, ${' .. var.name .. '},' ..
-					                                    '${' .. var.name .. '_len});\n'
+				rec._push = function(self, var)
+					return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
 				end
-				return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
+				rec._ffi_check = function(self, var)
+					return '\n'
+				end
+				rec._ffi_opt = function(self, var, default)
+					default = default or '0'
+					return 
+						'  ${' .. var.name .. '} = ${' .. var.name .. '} or ' .. default .. '\n'
+				end
 			end
 		end
 	end,
@@ -131,6 +166,10 @@ process_records{
 			return '  ' .. func_name ..'(L, ${' .. var.name .. '});\n'
 		end
 		rec._push_error = rec._push
+		rec._ffi_push = function(self, var)
+			return '  ' .. func_name ..'(${' .. var.name .. '})\n'
+		end
+		rec._ffi_push_error = rec._ffi_push
 	end,
 	object = function(self, rec, parent)
 		rec.lang_type = 'userdata'
@@ -150,9 +189,23 @@ process_records{
 			if own == nil then own = '0' end
 			return '  '..type_name..'_push(L, ${'..var.name..'}, '..own..');\n'
 		end
+		rec._ffi_check = function(self, var)
+			if var.is_this then
+				return 'local ${' .. var.name .. '} = '..type_name..'_check(self)\n'
+			end
+			local name = '${' .. var.name .. '}'
+			return '' .. name .. ' = '..type_name..'_check('..name..')\n'
+		end
+		rec._ffi_push = function(self, var, own)
+			if own == nil then own = '0' end
+			return '  '..type_name..'_push(${'..var.name..'}, '..own..')\n'
+		end
 		if rec.error_on_null then
 			rec._push_error = function(self, var)
 				return '  lua_pushstring(L, ' .. rec.error_on_null .. ');\n'
+			end
+			rec._ffi_push_error = function(self, var)
+				return '  ' .. rec.error_on_null .. '\n'
 			end
 		end
 	end,

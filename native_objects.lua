@@ -26,6 +26,7 @@ require("record")
 
 local tinsert=table.insert
 local tappend=function(dst,src) for _,v in pairs(src) do dst[#dst+1] = v end end
+local tconcat=table.concat
 
 --
 -- Switch language we are generating bindings for.
@@ -198,6 +199,9 @@ function object(name)
 		-- create 'is_error_check' code
 		rec.is_error_check = function(rec)
 			return "(NULL == ${" .. rec.name .. "})"
+		end
+		rec.ffi_is_error_check = function(rec)
+			return "(nil == ${" .. rec.name .. "})"
 		end
 	end
 	return rec
@@ -700,12 +704,6 @@ function ffi(rec)
 	return make_record(rec, "ffi")
 end
 
-function ffi_cdef(cdefs)
-	rec = make_record({}, "ffi_cdef")
-	rec.cdefs = cdefs
-	return rec
-end
-
 function ffi_files(rec)
 	for i=1,#rec do
 		rec[i] = subfile_path(rec[i])
@@ -726,14 +724,18 @@ function ffi_source(part)
 end
 end
 
-function ffi_call(return_type)
-	return function (cfunc)
+function ffi_cdef(cdef)
+	return ffi_source("ffi_cdef")(cdef)
+end
+
+function ffi_export(return_type)
+	return function (name)
 	return function (params)
-	rec = make_record({}, "ffi_call")
+	rec = make_record({}, "ffi_export")
 	-- parse return c_type.
 	rec.ret = return_type or "void"
 	-- parse c function to call.
-	rec.cfunc = cfunc
+	rec.name = name
 	-- parse params
 	rec.params = params
 	if rec.params == nil then rec.params = {} end
@@ -1026,7 +1028,10 @@ local function process_module_file(file)
 	end,
 	c_call = function(self, rec, parent)
 		local src={}
-		local ret = rec.ret
+		local ffi_cdef={}
+		local ffi_src={}
+		local ret_type = rec.ret
+		local ret = ret_type
 		-- convert return type into "var_out" if it's not a "void" type.
 		if ret ~= "void" then
 			local is_this = false
@@ -1034,11 +1039,12 @@ local function process_module_file(file)
 			if parent.is_constructor then
 				local this_var = parent.var_map.this
 				if this_var and ret == this_var.c_type then
+					ret_type = this_var.c_type
 					is_this = true
 				end
 			end
 			if is_this then
-				src[#src+1] = "  ${this} = "
+				ret = "  ${this} = "
 			else
 				local rc
 				if type(ret) == 'string' then
@@ -1046,17 +1052,24 @@ local function process_module_file(file)
 				else
 					rc = var_out(ret)
 				end
+				ret_type = rc.c_type
 				-- register var_out variable.
 				parent:add_variable(rc)
 				-- add var_out record to parent
 				parent:add_record(rc)
-				src[#src+1] = "  ${" .. rc.name .. "} = "
+				ret = "  ${" .. rc.name .. "} = "
 			end
 		else
-			src[#src+1] = "  "
+			ret = "  "
 		end
+		src[#src+1] = ret
+		ffi_cdef[#ffi_cdef+1] = ret_type .. " "
+		ffi_src[#ffi_src+1] = ret
 		-- append c function to call.
-		src[#src+1] = rec.cfunc .. "("
+		local func_start = rec.cfunc .. "("
+		src[#src+1] = func_start
+		ffi_cdef[#ffi_cdef+1] = func_start
+		ffi_src[#ffi_src+1] = "C." .. func_start
 		-- convert params to "var_in" records.
 		local params = {}
 		local list = rec.params
@@ -1094,6 +1107,8 @@ local function process_module_file(file)
 			local var = params[i]
 			if i > 1 then
 				src[#src+1] = ", "
+				ffi_cdef[#ffi_cdef+1] = ", "
+				ffi_src[#ffi_src+1] = ", "
 			end
 			local name = var.name
 			if var.is_length_ref then
@@ -1101,16 +1116,63 @@ local function process_module_file(file)
 			else
 				name = "${" .. name .. "}"
 			end
+			-- append parameter to c source call
 			if var.wrap then
 				src[#src+1] = var.wrap .. "("
 				src[#src+1] = name .. ")"
 			else
 				src[#src+1] = name
 			end
+			-- append parameter to ffi source call
+			ffi_src[#ffi_src+1] = name
+			-- append parameter type & name to ffi cdef record
+			ffi_cdef[#ffi_cdef+1] = var.c_type .. ' '
+			ffi_cdef[#ffi_cdef+1] = name
 		end
 		src[#src+1] = ");"
+		ffi_cdef[#ffi_cdef+1] = ");\n"
+		ffi_src[#ffi_src+1] = ")"
 		-- replace `c_call` with `c_source` record
-		parent:replace_record(rec, c_source("src")(src))
+		local idx = parent:replace_record(rec, c_source("src")(src))
+		-- insert FFI source record.
+		parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
+		parent:insert_record(ffi_source("ffi_src")(ffi_src), idx+1)
+	end,
+	ffi_export = function(self, rec, parent)
+		local ffi_cdef={}
+		local ffi_src={}
+		-- pass C definition to FFI
+		ffi_cdef[#ffi_cdef+1] = 'typedef '
+		ffi_cdef[#ffi_cdef+1] = rec.ret .. " (*"
+		ffi_cdef[#ffi_cdef+1] = rec.name .. ")"
+		local params = rec.params
+		if type(params) == 'string' then
+			ffi_cdef[#ffi_cdef+1] = params .. ";\n"
+		else
+			ffi_cdef[#ffi_cdef+1] = "("
+			for i=1,#params,2 do
+				local c_type = params[i]
+				local name = params[i+1]
+				if i > 1 then
+					ffi_cdef[#ffi_cdef+1] = ","
+				end
+				ffi_cdef[#ffi_cdef+1] = c_type .. " "
+				ffi_cdef[#ffi_cdef+1] = name
+			end
+			ffi_cdef[#ffi_cdef+1] = ");\n"
+		end
+		-- load exported symbol
+		ffi_src[#ffi_src+1] = 'local '
+		ffi_src[#ffi_src+1] = rec.name
+		ffi_src[#ffi_src+1] = ' = ffi.new("'
+		ffi_src[#ffi_src+1] = rec.name
+		ffi_src[#ffi_src+1] = '", _priv["'
+		ffi_src[#ffi_src+1] = rec.name
+		ffi_src[#ffi_src+1] = '"])\n'
+		-- insert FFI source record.
+		local idx = parent:find_record(rec)
+		parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
+		parent:insert_record(ffi_source("ffi_src")(ffi_src), idx+1)
 	end,
 	}
 
@@ -1190,6 +1252,17 @@ local function process_module_file(file)
 			idx = idx + 1
 			rec[idx] = misc[i]
 		end
+		-- generate list of input parameter names for FFI functions.
+		local ffi_params = {}
+		for i=1,in_count do
+			local name = inputs[i].name
+			if name ~= 'this' then
+				ffi_params[i] = '${' .. inputs[i].name .. '}'
+			else
+				ffi_params[i] = 'self'
+			end
+		end
+		rec.ffi_params = tconcat(ffi_params, ', ')
 	end,
 	}
 
