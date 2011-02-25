@@ -1340,10 +1340,11 @@ end
 	-- append custom dyn caster code
 	parent:write_part("methods", rec:dump_parts{ "src" })
 
-	if not self._cur_module.ffi_manual_bindings then
-		parent:write_part("ffi_src", rec:dump_parts{ "ffi_src" })
-		parent:write_part("ffi_cdef", rec:dump_parts{ "ffi_cdef" })
-	end
+	-- don't generate FFI bindings
+	if self._cur_module.ffi_manual_bindings then return end
+
+	parent:write_part("ffi_src", rec:dump_parts{ "ffi_src" })
+	parent:write_part("ffi_cdef", rec:dump_parts{ "ffi_cdef" })
 end,
 object = function(self, rec, parent)
 	rec:add_var('object_name', rec.name)
@@ -1509,13 +1510,13 @@ object_end = function(self, rec, parent)
 	-- copy parts to parent
 	parent:copy_parts(rec, parts)
 
-	-- object's ffi_src is auto-generated, so only copy it to parent if manual bindings is off.
-	if not self._cur_module.ffi_manual_bindings then
-		local ffi_parts = { "ffi_cdef", "ffi_src" }
-		rec:vars_parts(ffi_parts)
-		parent:copy_parts(rec, ffi_parts)
-		--parent:write_part("ffi_src", rec:dump_parts(ffi_parts))
-	end
+	-- don't generate FFI bindings
+	if self._cur_module.ffi_manual_bindings then return end
+
+	-- copy generated FFI bindings to parent
+	local ffi_parts = { "ffi_cdef", "ffi_src" }
+	rec:vars_parts(ffi_parts)
+	parent:copy_parts(rec, ffi_parts)
 end,
 callback_state = function(self, rec, parent)
 	rec:add_var('wrap_type', rec.wrap_type)
@@ -1774,6 +1775,7 @@ c_function = function(self, rec, parent)
 			{'  {"', rec.name, '", ', c_name, '},\n'})
 	elseif rec._is_meta_method then
 		local name = lua_meta_methods[rec.name]
+		ffi_table = '_mt'
 		parent:write_part('metas_regs',
 			{'  {"', name, '", ', c_name, '},\n'})
 	elseif rec._is_method then
@@ -1834,9 +1836,12 @@ c_function_end = function(self, rec, parent)
 	-- finialize C function code.
 	self._cur_module:write_part('methods', rec:dump_parts(parts))
 
+	-- don't generate FFI bindings
+	if self._cur_module.ffi_manual_bindings then return end
+
 	-- check if function has FFI support
 	local ffi_src = rec:dump_parts("ffi_src")
-	if rec.no_ffi or rec.__gc or #ffi_src == 0 then return end
+	if rec.no_ffi or #ffi_src == 0 then return end
 
 	-- end Lua code for FFI function
 	local ffi_parts = {"ffi_pre", "ffi_src", "ffi_post"}
@@ -1849,12 +1854,10 @@ c_function_end = function(self, rec, parent)
 
 	rec:vars_parts(ffi_parts)
 	-- append FFI-based function to parent's FFI source
-	if not self._cur_module.ffi_manual_bindings then
-		local ffi_cdef = { "ffi_cdef" }
-		rec:vars_parts(ffi_cdef)
-		parent:write_part("ffi_cdef", rec:dump_parts(ffi_cdef))
-		parent:write_part("ffi_src", rec:dump_parts(ffi_parts))
-	end
+	local ffi_cdef = { "ffi_cdef" }
+	rec:vars_parts(ffi_cdef)
+	parent:write_part("ffi_cdef", rec:dump_parts(ffi_cdef))
+	parent:write_part("ffi_src", rec:dump_parts(ffi_parts))
 end,
 c_source = function(self, rec, parent)
 	parent:write_part(rec.part, rec.src)
