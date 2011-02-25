@@ -728,10 +728,21 @@ function ffi_cdef(cdef)
 	return ffi_source("ffi_cdef")(cdef)
 end
 
-function ffi_export(return_type)
+function ffi_export(c_type)
+	return function (name)
+	rec = make_record({}, "ffi_export")
+	-- parse c_type.
+	rec.c_type = c_type
+	-- parse name of symbol to export
+	rec.name = name
+	return rec
+end
+end
+
+function ffi_export_function(return_type)
 	return function (name)
 	return function (params)
-	rec = make_record({}, "ffi_export")
+	rec = make_record({}, "ffi_export_function")
 	-- parse return c_type.
 	rec.ret = return_type or "void"
 	-- parse c function to call.
@@ -1139,12 +1150,26 @@ local function process_module_file(file)
 		parent:insert_record(ffi_source("ffi_src")(ffi_src), idx+1)
 	end,
 	ffi_export = function(self, rec, parent)
+		local ffi_src={}
+		-- load exported symbol
+		ffi_src[#ffi_src+1] = 'local '
+		ffi_src[#ffi_src+1] = rec.name
+		ffi_src[#ffi_src+1] = ' = ffi.new("'
+		ffi_src[#ffi_src+1] = rec.c_type
+		ffi_src[#ffi_src+1] = ' *", _priv["'
+		ffi_src[#ffi_src+1] = rec.name
+		ffi_src[#ffi_src+1] = '"])\n'
+		-- insert FFI source record.
+		local idx = parent:find_record(rec)
+		parent:insert_record(ffi_source("ffi_src")(ffi_src), idx)
+	end,
+	ffi_export_function = function(self, rec, parent)
 		local ffi_cdef={}
 		local ffi_src={}
 		-- pass C definition to FFI
 		ffi_cdef[#ffi_cdef+1] = 'typedef '
 		ffi_cdef[#ffi_cdef+1] = rec.ret .. " (*"
-		ffi_cdef[#ffi_cdef+1] = rec.name .. ")"
+		ffi_cdef[#ffi_cdef+1] = rec.name .. "_func)"
 		local params = rec.params
 		if type(params) == 'string' then
 			ffi_cdef[#ffi_cdef+1] = params .. ";\n"
@@ -1166,7 +1191,7 @@ local function process_module_file(file)
 		ffi_src[#ffi_src+1] = rec.name
 		ffi_src[#ffi_src+1] = ' = ffi.new("'
 		ffi_src[#ffi_src+1] = rec.name
-		ffi_src[#ffi_src+1] = '", _priv["'
+		ffi_src[#ffi_src+1] = '_func", _priv["'
 		ffi_src[#ffi_src+1] = rec.name
 		ffi_src[#ffi_src+1] = '"])\n'
 		-- insert FFI source record.

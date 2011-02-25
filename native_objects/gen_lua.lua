@@ -590,13 +590,6 @@ static FUNC_UNUSED int lua_checktype_ref(lua_State *L, int _index, int _type) {
 }
 
 #if LUAJIT_FFI
-static int nobj_udata_delete_ffi(lua_State *L) {
-	/* clear the metatable to invalidate userdata. */
-	lua_pushnil(L);
-	lua_setmetatable(L, 1);
-	return 0;
-}
-
 static int nobj_udata_new_ffi(lua_State *L) {
 	size_t size = luaL_checkinteger(L, 1);
 	void *ud;
@@ -628,8 +621,7 @@ static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
 		lua_pushvalue(L, priv_table); /* move priv_table to top of stack. */
 		lua_remove(L, priv_table);
 		lua_pushcfunction(L, nobj_udata_new_ffi);
-		lua_pushcfunction(L, nobj_udata_delete_ffi);
-		err = lua_pcall(L, 4, 0, 0);
+		err = lua_pcall(L, 3, 0, 0);
 	}
 	if(err) {
 		const char *msg = "<err not a string>";
@@ -805,9 +797,9 @@ int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 -- FFI templates
 --
 local ffi_helper_code = [===[
-local _M, _priv, udata_new, udata_delete = ...
+local _M, _priv, udata_new = ...
 
---local getmetatable = debug.getmetatable
+local d_setmetatable = debug.setmetatable
 
 -- try loading luajit's ffi
 local stat, ffi=pcall(require,"ffi")
@@ -886,7 +878,7 @@ local function obj_udata_luadelete(ud_obj, type_mt)
 	ud.obj = nil
 	ud.flags = 0
 	-- invalid userdata, by setting the metatable to nil.
-	udata_delete(ud_obj)
+	d_setmetatable(ud_obj, nil)
 	return obj, flags
 end
 
@@ -954,7 +946,7 @@ end
 local function obj_simple_udata_luadelete(ud_obj, type_mt)
 	local c_obj = obj_simple_udata_luacheck(ud_obj, type_mt)
 	-- invalid userdata, by setting the metatable to nil.
-	udata_delete(ud_obj)
+	d_setmetatable(ud_obj, nil)
 	return c_obj, OBJ_UDATA_FLAG_OWN
 end
 
@@ -1259,7 +1251,7 @@ c_module_end = function(self, rec, parent)
 			ffi_module_template,
 			'\n'
 		})
-		local ffi_code = ffi_helper_code .. rec:dump_parts{ "ffi_obj_type", "ffi_cdef", "ffi_src" }
+		local ffi_code = ffi_helper_code .. rec:dump_parts{ "ffi_cdef", "ffi_obj_type", "ffi_src" }
 		rec:write_part("ffi_code",
 		{'static const char ${module_c_name}_ffi_lua_code[] = ', dump_lua_code_to_c_str(ffi_code)
 		})
@@ -1479,8 +1471,8 @@ object_end = function(self, rec, parent)
 	}
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = { "funcdefs", "methods", "obj_type_ids", "ffi_obj_type", "obj_types",
-		"reg_arrays", "reg_sub_modules", "submodule_regs", "submodule_libs",
+	local parts = { "funcdefs", "methods", "obj_type_ids", "ffi_obj_type", "ffi_export",
+		"obj_types", "reg_arrays", "reg_sub_modules", "submodule_regs", "submodule_libs",
 		"luaopen_defs", "luaopen", "extra_code" }
 	rec:vars_parts(parts)
 	-- copy parts to parent
@@ -1838,6 +1830,10 @@ c_source = function(self, rec, parent)
 	parent:write_part(rec.part, "\n")
 end,
 ffi_export = function(self, rec, parent)
+	parent:write_part("ffi_export",
+		{'{ "', rec.name, '", ', rec.name, ' },\n'})
+end,
+ffi_export_function = function(self, rec, parent)
 	parent:write_part("ffi_export",
 		{'{ "', rec.name, '", ', rec.name, ' },\n'})
 end,
