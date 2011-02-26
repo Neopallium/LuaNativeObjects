@@ -114,7 +114,7 @@ For input variables Lua will give-up owner-ship of the object and only keep a re
 
 `?`, mark the input parameter as optional.
 
-`&`, this will wrap the variable access with `&(var)`.
+`&`, this will wrap the variable access with `&(var)` to pass a pointer to the value.  This is needed for some C functions that have output parameters.
 
-`*`, this will wrap the variable access with `*(var)`.
+`*`, this will wrap the variable access with `*(var)` to de-reference a pointer and pass it by-value.
 

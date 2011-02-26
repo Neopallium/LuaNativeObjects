@@ -8,7 +8,7 @@ Installing
 
 ### Install lua-__mod_name__:
 
-	curl -O "https://github.com/Neopallium/lua__mod_name__/raw/master/lua-__mod_name__-scm-0.rockspec"
+	curl -O "__project_github_url__/raw/master/lua-__mod_name__-scm-0.rockspec"
 	
 	luarocks install lua-__mod_name__-scm-0.rockspec
 
