@@ -14,6 +14,20 @@ Lua bindings using this generator
 * [Lua-zmq](http://github.com/Neopallium/lua-zmq)
 * [Luagit2](http://github.com/Neopallium/luagit2)
 
+
+Template project for starting new bindings
+------------------------------------------
+
+There is a template for creating a new bindings project.  This is a lua script for automatically creating a new project from the template.
+
+To start a new bindings project run:
+
+	$ cd LuaNativeObjects/project_template/
+	$ lua RUN_THIS_FIRST.lua
+
+Then answer the questions and it will setup the new project.
+
+
 Example bindings
 ----------------
 
