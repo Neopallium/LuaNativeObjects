@@ -808,7 +808,6 @@ local d_setmetatable = debug.setmetatable
 -- try loading luajit's ffi
 local stat, ffi=pcall(require,"ffi")
 if not stat then
-	print("No FFI support: Using standard Lua api interface.")
 	return
 end
 -- check if ffi is disabled.
