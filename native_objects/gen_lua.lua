@@ -799,12 +799,6 @@ int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 -- FFI templates
 --
 local ffi_helper_code = [===[
-local _M, _priv, udata_new = ...
-
-local band = bit.band
-local d_getmetatable = debug.getmetatable
-local d_setmetatable = debug.setmetatable
-
 -- try loading luajit's ffi
 local stat, ffi=pcall(require,"ffi")
 if not stat then
@@ -815,6 +809,12 @@ if disable_ffi then
 	print("FFI disabled: Using standard Lua api interface.")
 	return
 end
+
+local _M, _priv, udata_new = ...
+
+local band = bit.band
+local d_getmetatable = debug.getmetatable
+local d_setmetatable = debug.setmetatable
 
 local OBJ_UDATA_FLAG_OWN		= 1
 local OBJ_UDATA_FLAG_LOOKUP	= 2
