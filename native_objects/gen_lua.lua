@@ -48,12 +48,14 @@ local obj_udata_types = [[
 /* define some types that we need. */
 typedef __int32 int32_t;
 typedef unsigned __int32 uint32_t;
+typedef int bool;
 
 #define FUNC_UNUSED
 
 #else
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define FUNC_UNUSED __attribute__((unused))
 
@@ -786,9 +788,10 @@ int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	lua_setglobal(L, reg->type->name);    /* global: <object_name> = <object public API> */
 #endif
 
-#if LUAJIT_FFI
+#if ${module_c_name}_${object_name}_LUAJIT_FFI
 	nobj_try_loading_ffi(L, "${module_c_name}_${object_name}",
-		${module_c_name}_${object_name}_ffi_lua_code, NULL, priv_table);
+		${module_c_name}_${object_name}_ffi_lua_code,
+		${module_c_name}_${object_name}_ffi_export, priv_table);
 #endif
 	return 1;
 }
@@ -956,11 +959,11 @@ local function obj_simple_udata_luapush(c_obj, size, type_mt)
 
 	-- create new userdata
 	ud_obj = udata_new(size, type_mt)
-	local data = obj_simple_udata_ptr(ud_obj)
+	local cdata = obj_simple_udata_ptr(ud_obj)
 	-- init. object
-	ffi.copy(data, c_obj, size)
+	ffi.copy(cdata, c_obj, size)
 
-	return ud_obj
+	return ud_obj, cdata
 end
 
 ]===]
@@ -973,6 +976,7 @@ local function obj_type_${object_name}_check(ud_obj)
 	if c_obj == nil then
 		-- cdata object not in cache
 		c_obj = obj_simple_udata_luacheck(ud_obj, ${object_name}_mt)
+		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
 		${object_name}_objects[ud_obj] = c_obj
 	end
 	return c_obj
@@ -985,8 +989,8 @@ end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 local function obj_type_${object_name}_push(c_obj)
-	local ud_obj = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
-	${object_name}_objects[ud_obj] = c_obj
+	local ud_obj, cdata = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
+	${object_name}_objects[ud_obj] = cdata
 	return ud_obj
 end
 
@@ -997,6 +1001,7 @@ local function obj_type_${object_name}_check(ud_obj)
 	if c_obj == nil then
 		-- cdata object not in cache
 		c_obj = obj_simple_udata_luacheck(ud_obj, ${object_name}_mt)
+		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
 		${object_name}_objects[ud_obj] = c_obj
 	end
 	return c_obj
@@ -1009,8 +1014,8 @@ end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 local function obj_type_${object_name}_push(c_obj)
-	local ud_obj = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
-	${object_name}_objects[ud_obj] = c_obj
+	local ud_obj, cdata = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
+	${object_name}_objects[ud_obj] = cdata
 	return ud_obj
 end
 
@@ -1021,6 +1026,7 @@ local function obj_type_${object_name}_check(ud_obj)
 	if c_obj == nil then
 		-- cdata object not in cache
 		c_obj = tonumber(ffi.cast('uintptr_t', obj_udata_luacheck(ud_obj, ${object_name}_mt)))
+		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
 		${object_name}_objects[ud_obj] = c_obj
 	end
 	return c_obj
@@ -1050,6 +1056,7 @@ local function obj_type_${object_name}_check(ud_obj)
 	if c_obj == nil then
 		-- cdata object not in cache
 		c_obj = obj_udata_luacheck(ud_obj, ${object_name}_mt)
+		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
 		${object_name}_objects[ud_obj] = c_obj
 	end
 	return c_obj
@@ -1073,6 +1080,7 @@ local function obj_type_${object_name}_check(ud_obj)
 	if c_obj == nil then
 		-- cdata object not in cache
 		c_obj = obj_udata_luacheck(ud_obj, ${object_name}_mt)
+		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
 		${object_name}_objects[ud_obj] = c_obj
 	end
 	return c_obj
@@ -1097,10 +1105,20 @@ local ffi_module_template = [[
 local ${module_c_name}_mt = _M
 local ${module_c_name}_meth = _M
 local ${module_c_name}_func = _M
+local ${object_name}_pub = _M
+
+]]
+
+local ffi_submodule_template = [[
+local ${module_c_name}_${object_name}_mt = _M
+local ${module_c_name}_${object_name}_meth = _M
+local ${module_c_name}_${object_name}_func = _M
+local ${object_name}_pub = _M
 
 ]]
 
 local ffi_object_template = [[
+local ${object_name}_pub = _M["${object_name}"]
 local ${object_name}_mt = _priv["${object_name}"]
 local ${object_name}_type = obj_type_ptr(${object_name}_mt[".type"])
 local ${object_name}_meth = ${object_name}_mt.__index
@@ -1165,12 +1183,13 @@ end
 local function dump_lua_code_to_c_str(code)
 	-- make Lua code C-safe
 	code = code:gsub('[\n"\\%z]', {
-	['\n'] = "\\n\\\n",
+	['\n'] = "\\n\"\n\"",
+	['\r'] = "\\r",
 	['"'] = [[\"]],
 	['\\'] = [[\\]],
 	['\0'] = [[\0]],
 	})
-	return '"\\\n' .. code .. '";'
+	return '"' .. code .. '";'
 end
 
 print"============ Lua bindings ================="
@@ -1273,7 +1292,7 @@ c_module_end = function(self, rec, parent)
 		})
 		local ffi_code = ffi_helper_code .. rec:dump_parts{ "ffi_cdef", "ffi_obj_type", "ffi_src" }
 		rec:write_part("ffi_code",
-		{'static const char ${module_c_name}_ffi_lua_code[] = ', dump_lua_code_to_c_str(ffi_code)
+		{'\nstatic const char ${module_c_name}_ffi_lua_code[] = ', dump_lua_code_to_c_str(ffi_code)
 		})
 	end
 	-- append extra source code.
@@ -1286,8 +1305,8 @@ c_module_end = function(self, rec, parent)
 	end
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = {"funcdefs", "reg_sub_modules", "submodule_regs", "submodule_libs", "helper_funcs",
-		"ffi_code", "extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
+	local parts = { "defines", "funcdefs", "reg_sub_modules", "submodule_regs", "submodule_libs",
+		"helper_funcs", "ffi_code", "extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
 	rec:vars_parts(parts)
 
 	self._cur_module = nil
@@ -1358,6 +1377,19 @@ object = function(self, rec, parent)
 	-- FFI code
 	rec:write_part("ffi_src",
 		{'\n-- Start "${object_name}" FFI interface\n'})
+	-- Sub-module FFI code
+	if rec.register_as_submodule then
+		-- luajit_ffi?
+		rec:write_part("defines",
+			{'#define ${module_c_name}_${object_name}_LUAJIT_FFI ',(rec.luajit_ffi and 1 or 0),'\n'})
+		-- symbols to export to FFI
+		rec:write_part("ffi_export",
+			{'\nstatic const ffi_export_symbol ${module_c_name}_${object_name}_ffi_export[] = {\n'})
+		-- start ffi.cdef code block
+		rec:write_part("ffi_cdef", {
+		'ffi.cdef[[\n'
+		})
+	end
 end,
 object_end = function(self, rec, parent)
 	-- check for dyn_caster
@@ -1464,7 +1496,37 @@ object_end = function(self, rec, parent)
 			'obj_${object_name}_fields, obj_${object_name}_constants}'
 		}
 	end
+	-- end object's FFI source
+	rec:write_part("ffi_src",
+		{'-- End "${object_name}" FFI interface\n\n'})
+
 	if rec.register_as_submodule then
+		-- Sub-module FFI code
+		if self._cur_module.luajit_ffi and rec.luajit_ffi then
+			-- end list of FFI symbols
+			rec:write_part("ffi_export", {
+			'  {NULL, NULL}\n',
+			'};\n\n'
+			})
+			-- end ffi.cdef code block
+			rec:write_part("ffi_cdef", {
+			'\n]]\n\n'
+			})
+			-- add module's FFI template
+			rec:write_part("ffi_obj_type", {
+				ffi_submodule_template,
+				'\n'
+			})
+			local ffi_code = ffi_helper_code .. rec:dump_parts{ "ffi_cdef", "ffi_obj_type", "ffi_src" }
+			rec:write_part("ffi_code",
+			{'\nstatic const char ${module_c_name}_${object_name}_ffi_lua_code[] = ',
+				dump_lua_code_to_c_str(ffi_code)
+			})
+			-- copy ffi_code to partent
+			rec:vars_parts{ "ffi_code", "ffi_export" }
+			parent:copy_parts(rec, { "ffi_code" })
+			rec:write_part("luaopen_defs", rec:dump_parts{ "ffi_export" })
+		end
 		-- add submodule luaopen function.
 		rec:write_part("luaopen", luaopen_submodule)
 		rec:write_part("luaopen_defs",
@@ -1479,10 +1541,20 @@ object_end = function(self, rec, parent)
 	else
 		rec:write_part("reg_sub_modules", object_reg_info)
 		rec:write_part("reg_sub_modules", ",\n")
+		-- apply variables to FFI parts
+		local ffi_parts = { "ffi_obj_type", "ffi_export" }
+		rec:vars_parts(ffi_parts)
+		-- copy parts to parent
+		parent:copy_parts(rec, ffi_parts)
+
+		-- don't generate FFI bindings
+		if self._cur_module.ffi_manual_bindings then return end
+
+		-- copy generated FFI bindings to parent
+		local ffi_parts = { "ffi_cdef", "ffi_src" }
+		rec:vars_parts(ffi_parts)
+		parent:copy_parts(rec, ffi_parts)
 	end
-	-- FFI code
-	rec:write_part("ffi_src",
-		{'-- End "${object_name}" FFI interface\n\n'})
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "src" })
 	-- combine reg arrays into one part.
@@ -1492,20 +1564,13 @@ object_end = function(self, rec, parent)
 	}
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = { "funcdefs", "methods", "obj_type_ids", "ffi_obj_type", "ffi_export",
+	local parts = { "defines", "funcdefs", "methods", "obj_type_ids",
 		"obj_types", "reg_arrays", "reg_sub_modules", "submodule_regs", "submodule_libs",
 		"luaopen_defs", "luaopen", "extra_code" }
 	rec:vars_parts(parts)
 	-- copy parts to parent
 	parent:copy_parts(rec, parts)
 
-	-- don't generate FFI bindings
-	if self._cur_module.ffi_manual_bindings then return end
-
-	-- copy generated FFI bindings to parent
-	local ffi_parts = { "ffi_cdef", "ffi_src" }
-	rec:vars_parts(ffi_parts)
-	parent:copy_parts(rec, ffi_parts)
 end,
 callback_state = function(self, rec, parent)
 	rec:add_var('wrap_type', rec.wrap_type)
@@ -1762,6 +1827,7 @@ c_function = function(self, rec, parent)
 	elseif rec.is_constructor then
 		parent:write_part("pub_funcs_regs",
 			{'  {"', rec.name, '", ', c_name, '},\n'})
+		ffi_table = '_pub'
 	elseif rec._is_meta_method then
 		local name = lua_meta_methods[rec.name]
 		ffi_table = '_mt'
@@ -1773,6 +1839,7 @@ c_function = function(self, rec, parent)
 	else
 		parent:write_part(parent.functions_regs,
 			{'  {"', rec.name, '", ', c_name, '},\n'})
+		ffi_table = '_pub'
 	end
 	rec:write_part("pre",
 	{'/* method: ', rec.name, ' */\n',

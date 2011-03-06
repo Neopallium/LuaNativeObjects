@@ -117,7 +117,7 @@ process_records{
 						'((nil ~= ${' .. var.name .. '}) and ' ..
 						'ffi.string(${' .. var.name .. '},${' .. var.name .. '_len}))\n'
 					end
-					return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
+					return '((nil ~= ${' .. var.name .. '}) and ffi.string(${' .. var.name .. '}))\n'
 				end
 				rec._ffi_check = function(self, var)
 					return 'local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
