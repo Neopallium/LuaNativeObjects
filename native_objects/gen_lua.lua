@@ -45,9 +45,11 @@ local obj_udata_types = [[
 
 #ifdef _MSC_VER
 
-/* define some types that we need. */
+/* define some standard types missing on Windows. */
 typedef __int32 int32_t;
+typedef __int64 int64_t;
 typedef unsigned __int32 uint32_t;
+typedef unsigned __int64 uint64_t;
 typedef int bool;
 
 #define FUNC_UNUSED
@@ -500,7 +502,6 @@ static void obj_type_register_constants(lua_State *L, const obj_const *constants
 }
 
 static void obj_type_register_package(lua_State *L, const reg_sub_module *type_reg) {
-	obj_type *type = type_reg->type;
 	const luaL_reg *reg_list = type_reg->pub_funcs;
 
 	/* create public functions table. */
@@ -520,7 +521,8 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 	const obj_base *base = type_reg->bases;
 
 	if(type_reg->is_package == 1) {
-		return obj_type_register_package(L, type_reg);
+		obj_type_register_package(L, type_reg);
+		return;
 	}
 
 	/* create public functions table. */
@@ -644,43 +646,43 @@ static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
 local obj_type_check_delete_push = {
 ['simple'] = [[
 #define obj_type_${object_name}_check(L, _index) \
-  *((${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name})))
+	*((${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name})))
 #define obj_type_${object_name}_delete(L, _index, flags) \
-  *((${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags))
+	*((${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags))
 #define obj_type_${object_name}_push(L, obj, flags) \
-  obj_simple_udata_luapush(L, &(obj), sizeof(${object_name}), &(obj_type_${object_name}))
+	obj_simple_udata_luapush(L, &(obj), sizeof(${object_name}), &(obj_type_${object_name}))
 ]],
 ['embed'] = [[
 #define obj_type_${object_name}_check(L, _index) \
-  (${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name}))
+	(${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
-  (${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
+	(${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
-  obj_simple_udata_luapush(L, obj, sizeof(${object_name}), &(obj_type_${object_name}))
+	obj_simple_udata_luapush(L, obj, sizeof(${object_name}), &(obj_type_${object_name}))
 ]],
 ['cast pointer'] = [[
 #define obj_type_${object_name}_check(L, _index) \
-  (${object_name})(uintptr_t)obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
+	(${object_name})(uintptr_t)obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
-  (${object_name})(uintptr_t)obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
+	(${object_name})(uintptr_t)obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
-  obj_udata_luapush(L, (void *)((uintptr_t)obj), &(obj_type_${object_name}), flags)
+	obj_udata_luapush(L, (void *)((uintptr_t)obj), &(obj_type_${object_name}), flags)
 ]],
 ['generic'] = [[
 #define obj_type_${object_name}_check(L, _index) \
-  obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
+	obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
-  obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
+	obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
-  obj_udata_luapush(L, obj, &(obj_type_${object_name}), flags)
+	obj_udata_luapush(L, obj, &(obj_type_${object_name}), flags)
 ]],
 ['generic_weak'] = [[
 #define obj_type_${object_name}_check(L, _index) \
-  obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
+	obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
-  obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
+	obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
-  obj_udata_luapush_weak(L, (void *)obj, &(obj_type_${object_name}), flags)
+	obj_udata_luapush_weak(L, (void *)obj, &(obj_type_${object_name}), flags)
 ]],
 }
 
@@ -716,7 +718,7 @@ static void create_object_instance_cache(lua_State *L) {
 ]]
 
 local luaopen_main = [[
-int luaopen_${module_c_name}(lua_State *L) {
+LUALIB_API int luaopen_${module_c_name}(lua_State *L) {
 	const reg_sub_module *reg = reg_sub_modules;
 	const luaL_Reg *submodules = submodule_libs;
 	int priv_table = -1;
@@ -763,7 +765,7 @@ int luaopen_${module_c_name}(lua_State *L) {
 ]]
 
 local luaopen_submodule = [[
-int luaopen_${module_c_name}_${object_name}(lua_State *L) {
+LUALIB_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	const reg_sub_module *reg = &(submodule_${object_name}_reg);
 	const luaL_Reg null_reg_list = { NULL, NULL };
 	int priv_table = -1;
@@ -1711,7 +1713,7 @@ extends_end = function(self, rec, parent)
 		})
 	end
 	-- map in/out variables in c source.
-	local parts = {"pre", "src", "post"}
+	local parts = {"pre", "pre_src", "src", "post"}
 	rec:vars_parts(parts)
 
 	-- append custom base caster code
@@ -1881,7 +1883,7 @@ c_function_end = function(self, rec, parent)
 		end
 	end
 	-- apply variable name replacing in generated code.
-	local parts = {"pre", "src", "post"}
+	local parts = {"pre", "pre_src", "src", "post"}
 	rec:vars_parts(parts)
 
 	local outs = rec.pushed_values
@@ -1949,6 +1951,8 @@ var_in = function(self, rec, parent)
 			{
 			'  int ',flags,' = 0;\n',
 			'  ', rec.c_type, lua:_delete(rec, '&(' .. flags .. ')'),
+			})
+		parent:write_part("pre_src", {
 			'  if(!(',flags,' & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
 			})
 		parent:write_part("ffi_pre",

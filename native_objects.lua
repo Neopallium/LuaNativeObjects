@@ -729,12 +729,38 @@ function ffi_cdef(cdef)
 end
 
 function ffi_load(name)
+	if type(name) == 'table' then
+		local default_lib = name[1] or name.default
+		local src = { 'local os_lib_table = {\n' }
+		local off = #src
+		for k,v in pairs(name) do
+			if type(k) == 'string' and type(v) == 'string' then
+				off = off + 1; src[off] = '\t["'
+				off = off + 1; src[off] = k
+				off = off + 1; src[off] = '"] = "'
+				off = off + 1; src[off] = v
+				off = off + 1; src[off] = '",\n'
+			end
+		end
+		off = off + 1; src[off] = '}\n'
+		off = off + 1; src[off] = 'local C = ffi.load(os_lib_table[ffi.os]'
+		if type(default_lib) == 'string' then
+			off = off + 1; src[off] = ' or "'
+			off = off + 1; src[off] = default_lib
+			off = off + 1; src[off] = '"'
+		end
+		if name.global then
+			off = off + 1; src[off] = ', true'
+		end
+		off = off + 1; src[off] = ')\n'
+		return ffi_source("ffi_src")(tconcat(src))
+	end
 	return function (global)
-	if global == nil then global = false end
-	global = tostring(global)
-	local src = 'local C = ffi.load("' .. name .. '",' .. global .. ')\n'
-	return ffi_source("ffi_src")(src)
-end
+		if global == nil then global = false end
+		global = tostring(global)
+		local src = 'local C = ffi.load("' .. name .. '",' .. global .. ')\n'
+		return ffi_source("ffi_src")(src)
+	end
 end
 
 function ffi_export(c_type)
