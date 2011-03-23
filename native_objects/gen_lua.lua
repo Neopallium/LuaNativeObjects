@@ -2053,6 +2053,7 @@ var_out = function(self, rec, parent)
 			'    ', lua:_push(rec, flags),
 			'  } else {\n',
 			'    lua_pushboolean(L, 1);\n',
+			'    lua_pushnil(L);\n',
 			'  }\n',
 			})
 			if err_type.ffi_is_error_check then
