@@ -141,8 +141,12 @@ process_records{
 				end
 				rec._opt = function(self, var, default)
 					default = default or '0'
+					if l_type.opt then
+						return ' ${' .. var.name .. '} = ' ..
+							l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default .. ');\n'
+					end
 					return ' ${' .. var.name .. '} = ' ..
-						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default .. ');\n'
+						l_type.to .. '(L,${' .. var.name .. '::idx});\n'
 				end
 				rec._push = function(self, var)
 					return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
