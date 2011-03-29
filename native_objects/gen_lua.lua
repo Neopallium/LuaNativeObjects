@@ -313,6 +313,26 @@ static FUNC_UNUSED void obj_udata_luapush(lua_State *L, void *obj, obj_type *typ
 	lua_setmetatable(L, -2);
 }
 
+static FUNC_UNUSED void *obj_udata_luadelete_weak(lua_State *L, int _index, obj_type *type, int *flags) {
+	void *obj;
+	obj_udata *ud = obj_udata_luacheck_internal(L, _index, &(obj), type);
+	*flags = ud->flags;
+	/* null userdata. */
+	ud->obj = NULL;
+	ud->flags = 0;
+	/* clear the metatable to invalidate userdata. */
+	lua_pushnil(L);
+	lua_setmetatable(L, _index);
+	/* get objects weak table. */
+	lua_pushlightuserdata(L, obj_udata_weak_ref_key);
+	lua_rawget(L, LUA_REGISTRYINDEX); /* weak ref table. */
+	/* remove object from weak table. */
+	lua_pushlightuserdata(L, obj);
+	lua_pushnil(L);
+	lua_rawset(L, -3);
+	return obj;
+}
+
 static FUNC_UNUSED void obj_udata_luapush_weak(lua_State *L, void *obj, obj_type *type, int flags) {
 	obj_udata *ud;
 
@@ -680,7 +700,7 @@ local obj_type_check_delete_push = {
 #define obj_type_${object_name}_check(L, _index) \
 	obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
-	obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
+	obj_udata_luadelete_weak(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
 	obj_udata_luapush_weak(L, (void *)obj, &(obj_type_${object_name}), flags)
 ]],
@@ -910,6 +930,20 @@ local function obj_udata_luapush(obj, type_mt, obj_type, flags)
 	return ud_obj
 end
 
+local function obj_udata_luadelete_weak(ud_obj, type_mt)
+	local ud = obj_udata_luacheck_internal(ud_obj, type_mt)
+	local obj, flags = ud.obj, ud.flags
+	-- null userdata.
+	ud.obj = nil
+	ud.flags = 0
+	-- invalid userdata, by setting the metatable to nil.
+	d_setmetatable(ud_obj, nil)
+	-- remove object from weak ref. table.
+	local obj_key = tonumber(ffi.cast('uintptr_t', obj))
+	weak_objects[obj_key] = nil
+	return obj, flags
+end
+
 local function obj_udata_luapush_weak(obj, type_mt, obj_type, flags)
 	if obj == nil then return end
 
@@ -1090,7 +1124,7 @@ end
 
 local function obj_type_${object_name}_delete(ud_obj)
 	${object_name}_objects[ud_obj] = nil
-	return obj_udata_luadelete(ud_obj, ${object_name}_mt)
+	return obj_udata_luadelete_weak(ud_obj, ${object_name}_mt)
 end
 
 local function obj_type_${object_name}_push(c_obj, flags)
