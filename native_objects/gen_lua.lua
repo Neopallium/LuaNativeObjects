@@ -1189,17 +1189,30 @@ local function add_constant(rec, constant)
 	local str = 'NULL'
 	local num = '0.0'
 	local value = constant.value
+	local is_define = constant.is_define
 	-- check the type of the constant's value.
-	const_type = type(value)
+	const_type = constant.vtype or type(value)
 	if const_type == 'boolean' then
 		const_type = 'CONST_BOOLEAN'
-		num = (value and '1.0' or '0.0')
+		if is_define then
+			num = value
+		else
+			num = (value and '1.0' or '0.0')
+		end
 	elseif const_type == 'number' then
 		const_type = 'CONST_NUMBER'
-		num = tostring(value)
+		if is_define then
+			num = value
+		else
+			num = tostring(value)
+		end
 	elseif const_type == 'string' then
 		const_type = 'CONST_STRING'
-		str = '"' .. value .. '"'
+		if is_define then
+			str = value
+		else
+			str = '"' .. value .. '"'
+		end
 	else
 		-- un-supported type.
 		const_type = nil
@@ -1207,9 +1220,17 @@ local function add_constant(rec, constant)
 	end
 	-- write constant.
 	if const_type then
-		rec:write_part("const_regs", {
-		'  {"', constant.name, '", ', str, ', ', num, ', ',const_type,'},\n',
-		})
+		if is_define then
+			rec:write_part("const_regs", {
+			'#ifdef ', value, '\n',
+			'  {"', constant.name, '", ', str, ', ', num, ', ',const_type,'},\n',
+			'#endif\n',
+			})
+		else
+			rec:write_part("const_regs", {
+			'  {"', constant.name, '", ', str, ', ', num, ', ',const_type,'},\n',
+			})
+		end
 	end
 end
 

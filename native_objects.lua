@@ -299,8 +299,30 @@ function const(name)
 end
 end
 
+function const_def(name)
+	return function (rec)
+	local value = rec[1]
+	rec = make_record(rec, "const")
+	-- this is a constant definition.
+	rec.is_define = true
+	-- default to 'number' type.
+	rec.vtype = rec.vtype or 'number'
+	-- field's name
+	rec.name = name
+	-- field's value
+	rec.value = value
+	return rec
+end
+end
+
 function constants(values)
 	rec = make_record({}, "constants")
+	rec.values = values
+	return rec
+end
+
+function export_definitions(values)
+	rec = make_record({}, "export_definitions")
 	rec.values = values
 	return rec
 end
@@ -860,6 +882,20 @@ local function process_module_file(file)
 	constants = function(self, rec, parent)
 		for key,value in pairs(rec.values) do
 			parent:add_record(const(key)({ value }))
+		end
+		rec._rec_type = nil
+	end,
+	export_definitions = function(self, rec, parent)
+		local values = rec.values
+		-- export list of definitions as-is (i.e. no renaming).
+		for i=1,#values do
+			local name = values[i]
+			parent:add_record(const_def(name)({ name }))
+			values[i] = nil
+		end
+		-- export renamed definitions.
+		for key, value in pairs(values) do
+			parent:add_record(const_def(key)({ value }))
 		end
 		rec._rec_type = nil
 	end,
