@@ -1253,6 +1253,45 @@ local function dump_lua_code_to_c_str(code)
 	return '"' .. code .. '";'
 end
 
+local function reg_object_function(self, func, object)
+	local ffi_table = '_meth'
+	local name = func.name
+	local c_name = func.c_name
+	local reg_list
+	-- check if this is object free/destructure method
+	if func.is_destructor then
+		-- add '__gc' method.
+		if not self._cur_module.disable__gc and not object.disable__gc then
+			object:write_part('metas_regs',
+				{'  {"__gc", ', func.c_name, '},\n'})
+		end
+		if func._is_hidden then
+			-- don't register '__gc' metamethods as a public object method.
+			return '_mt', '__gc'
+		end
+		-- also register as a normal method.
+		reg_list = object.methods_regs
+	elseif func.is_constructor then
+		reg_list = "pub_funcs_regs"
+		ffi_table = '_pub'
+	elseif func._is_meta_method then
+		reg_list = "metas_regs"
+		ffi_table = '_mt'
+		-- use Lua's __* metamethod names
+		name = lua_meta_methods[func.name]
+	elseif func._is_method then
+		reg_list = object.methods_regs
+		ffi_table = '_meth'
+	else
+		reg_list = object.functions_regs
+		ffi_table = '_pub'
+	end
+	-- add method to reg list.
+	object:write_part(reg_list,
+		{'  {"', name, '", ', c_name, '},\n'})
+	return ffi_table, name
+end
+
 print"============ Lua bindings ================="
 local parsed = process_records{
 _modules_out = {},
@@ -1351,7 +1390,8 @@ c_module_end = function(self, rec, parent)
 			ffi_module_template,
 			'\n'
 		})
-		local ffi_code = ffi_helper_code .. rec:dump_parts{ "ffi_cdef", "ffi_obj_type", "ffi_src" }
+		local ffi_code = ffi_helper_code .. rec:dump_parts{
+			"ffi_cdef", "ffi_obj_type", "ffi_src", "ffi_extends" }
 		rec:write_part("ffi_code",
 		{'\nstatic const char ${module_c_name}_ffi_lua_code[] = ', dump_lua_code_to_c_str(ffi_code)
 		})
@@ -1578,7 +1618,8 @@ object_end = function(self, rec, parent)
 				ffi_submodule_template,
 				'\n'
 			})
-			local ffi_code = ffi_helper_code .. rec:dump_parts{ "ffi_cdef", "ffi_obj_type", "ffi_src" }
+			local ffi_code = ffi_helper_code .. rec:dump_parts{
+				"ffi_cdef", "ffi_obj_type", "ffi_src", "ffi_extends" }
 			rec:write_part("ffi_code",
 			{'\nstatic const char ${module_c_name}_${object_name}_ffi_lua_code[] = ',
 				dump_lua_code_to_c_str(ffi_code)
@@ -1612,7 +1653,7 @@ object_end = function(self, rec, parent)
 		if self._cur_module.ffi_manual_bindings then return end
 
 		-- copy generated FFI bindings to parent
-		local ffi_parts = { "ffi_cdef", "ffi_src" }
+		local ffi_parts = { "ffi_cdef", "ffi_src", "ffi_extends" }
 		rec:vars_parts(ffi_parts)
 		parent:copy_parts(rec, ffi_parts)
 	end
@@ -1677,6 +1718,10 @@ extends = function(self, rec, parent)
 	local base_cast = 'NULL'
 	if base == nil then return end
 	-- add methods/fields/constants from base object
+	parent:write_part("ffi_src",
+		{'-- Clear out methods from base class, to allow ffi-based methods from base class\n'})
+	parent:write_part("ffi_extends",
+		{'-- Copy ffi methods from base class to sub class.\n'})
 	for name,val in pairs(base.name_map) do
 		-- make sure sub-class has not override name.
 		if parent.name_map[name] == nil then
@@ -1684,8 +1729,15 @@ extends = function(self, rec, parent)
 			if val._is_method and not val.is_constructor then
 				local method_class = val._parent
 				parent.functions[name] = val
-				parent:write_part('methods_regs',
-					{'  {"', val.name, '", ', val.c_name, '},\n'})
+				-- register base class's method with sub class
+				local ffi_table, name = reg_object_function(self, val, parent)
+				-- write ffi code to remove registered base class method.
+				parent:write_part("ffi_src",
+				{'${object_name}',ffi_table,'.', name, ' = nil\n'})
+				-- write ffi code to copy method from base class.
+				parent:write_part("ffi_extends",
+				{'${object_name}',ffi_table,'.',name,' = ',
+					base.name,ffi_table,'.',name,'\n'})
 			elseif val._rec_type == 'field' then
 				parent.fields[name] = val
 			elseif val._rec_type == 'const' then
@@ -1862,36 +1914,12 @@ end,
 c_function = function(self, rec, parent)
 	rec.pushed_values = 0 -- track number of values pushed onto the stack.
 	rec:add_var('object_name', parent.name)
-	-- check if this is object free/destructure method
 	if rec.is_destructor then
 		rec.__gc = true -- mark as '__gc' method
-		-- add '__gc' method.
-		if not self._cur_module.disable__gc and not parent.disable__gc then
-			parent:write_part('metas_regs',
-				{'  {"__gc", ', c_name, '},\n'})
-		end
-		-- also register as a normal method.
-		if not rec._is_hidden then
-			parent:write_part(parent.methods_regs,
-				{'  {"', rec.name, '", ', c_name, '},\n'})
-		end
-	elseif rec.is_constructor then
-		parent:write_part("pub_funcs_regs",
-			{'  {"', rec.name, '", ', c_name, '},\n'})
-		ffi_table = '_pub'
-	elseif rec._is_meta_method then
-		local name = lua_meta_methods[rec.name]
-		ffi_table = '_mt'
-		parent:write_part('metas_regs',
-			{'  {"', name, '", ', c_name, '},\n'})
-	elseif rec._is_method then
-		parent:write_part(parent.methods_regs,
-			{'  {"', rec.name, '", ', c_name, '},\n'})
-	else
-		parent:write_part(parent.functions_regs,
-			{'  {"', rec.name, '", ', c_name, '},\n'})
-		ffi_table = '_pub'
 	end
+	-- register method/function with object.
+	local ffi_table, name = reg_object_function(self, rec, parent)
+
 	rec:write_part("pre",
 	{'/* method: ', rec.name, ' */\n',
 		'static int ', rec.c_name, '(lua_State *L) {\n'})
@@ -1904,8 +1932,8 @@ c_function = function(self, rec, parent)
 	end
 	-- generate FFI function
 	rec:write_part("ffi_pre",
-	{'-- method: ', rec.name, '\n',
-		'function ${object_name}',ffi_table,'.', rec.name, '(',rec.ffi_params,')\n'})
+	{'-- method: ', name, '\n',
+		'function ${object_name}',ffi_table,'.', name, '(',rec.ffi_params,')\n'})
 end,
 c_function_end = function(self, rec, parent)
 	-- is this a wrapper function
