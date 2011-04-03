@@ -1,6 +1,10 @@
 #
 # Lua Native Objects
 #
+
+set(LUA_NATIVE_OBJECTS_PATH ../LuaNativeObjects CACHE PATH
+				"Directory to LuaNativeObjects bindings generator.")
+
 macro(GenLuaNativeObjects _src_files_var)
 	set(_new_src_files)
 	foreach(_src_file ${${_src_files_var}})
