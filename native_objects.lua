@@ -430,11 +430,11 @@ end
 end
 
 function method_new(rec)
-	return constructor("new")(rec)
+	return constructor(rec)
 end
 
 function method_delete(rec)
-	return destructor("delete")(rec)
+	return destructor(rec)
 end
 
 function define(name)
@@ -514,7 +514,7 @@ local function parse_variable_name(var)
 			-- skip index value.
 			if idx then n = n + #idx end
 		elseif tok == '(' or tok == ')' then
-			assert(var._rec_type == 'var_out', "Only output variables can be marked as temp. variables.")
+			var._rec_type = 'var_out'
 			var.is_temp = true
 		end
 	end
@@ -1046,6 +1046,15 @@ local function process_module_file(file)
 		parent.constants[rec.name] = rec
 	end,
 	c_function = function(self, rec, parent)
+		local c_name = parent.name .. '__' .. rec.name
+		if rec._is_method then
+			assert(not parent.is_package,
+				"Package's can't have methods: package=" .. parent.name .. ", method=" .. rec.name)
+			c_name = c_name .. '__meth'
+		else
+			c_name = c_name .. '__func'
+		end
+		rec.c_name = c_name
 		-- add to name map to reserve the name.
 		assert(parent.name_map[rec.name] == nil,
 			"duplicate functions " .. rec.name .. " in " .. parent.name)
@@ -1064,9 +1073,9 @@ local function process_module_file(file)
 		function rec:add_variable(var, name)
 			name = name or var.name
 			local old_var = self.var_map[name]
-			-- add this variable to parent
 			assert(old_var == nil or old_var == var,
 				"duplicate variable " .. name .. " in " .. self.name)
+			-- add this variable to parent
 			self.var_map[name] = var
 		end
 	end,
@@ -1094,7 +1103,7 @@ local function process_module_file(file)
 				src[#src+1] = ", "
 			end
 			-- add cb_in to this rec.
-			local v_in = cb_in{ c_type, v}
+			local v_in = cb_in{ c_type, name}
 			rec:add_record(v_in)
 			src[#src+1] = c_type .. " ${" .. v_in.name .. "}" 
 		end

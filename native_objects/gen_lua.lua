@@ -444,7 +444,7 @@ static FUNC_UNUSED void * obj_simple_udata_luadelete(lua_State *L, int _index, o
 	return obj;
 }
 
-static FUNC_UNUSED void obj_simple_udata_luapush(lua_State *L, void *obj, int size, obj_type *type)
+static FUNC_UNUSED void *obj_simple_udata_luapush(lua_State *L, void *obj, int size, obj_type *type)
 {
 	/* create new userdata. */
 	void *ud = lua_newuserdata(L, size);
@@ -453,6 +453,8 @@ static FUNC_UNUSED void obj_simple_udata_luapush(lua_State *L, void *obj, int si
 	lua_pushlightuserdata(L, type);
 	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
 	lua_setmetatable(L, -2);
+
+	return ud;
 }
 
 /* default simple object equal method. */
@@ -584,6 +586,8 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 	lua_pushstring(L, type->name);
 	lua_pushvalue(L, -2); /* dup metatable. */
 	lua_rawset(L, priv_table);    /* priv_table["<object_name>"] = metatable */
+#else
+	(void)priv_table;
 #endif
 
 	luaL_register(L, NULL, type_reg->metas); /* fill metatable */
@@ -1856,16 +1860,6 @@ dyn_caster_end = function(self, rec, parent)
 	parent:write_part("methods", rec:dump_parts{ "src" })
 end,
 c_function = function(self, rec, parent)
-	local c_name = parent.name .. '__' .. rec.name
-	local ffi_table = '_meth'
-	if rec._is_method then
-		assert(not rec.is_package,
-			"Package's can't have methods: package=" .. parent.name .. ", method=" .. rec.name)
-		c_name = c_name .. '__meth'
-	else
-		c_name = c_name .. '__func'
-	end
-	rec.c_name = c_name
 	rec.pushed_values = 0 -- track number of values pushed onto the stack.
 	rec:add_var('object_name', parent.name)
 	-- check if this is object free/destructure method
@@ -1900,7 +1894,7 @@ c_function = function(self, rec, parent)
 	end
 	rec:write_part("pre",
 	{'/* method: ', rec.name, ' */\n',
-		'static int ', c_name, '(lua_State *L) {\n'})
+		'static int ', rec.c_name, '(lua_State *L) {\n'})
 	-- is this a wrapper function
 	if rec.wrapper_obj then
 		local wrap_type = rec.wrapper_obj.wrap_type
