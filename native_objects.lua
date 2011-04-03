@@ -1144,11 +1144,36 @@ local function process_module_file(file)
 					rc = var_out(ret)
 				end
 				ret_type = rc.c_type
-				-- register var_out variable.
-				parent:add_variable(rc)
-				-- add var_out record to parent
-				parent:add_record(rc)
-				ret = "  ${" .. rc.name .. "} = "
+				if rc.is_length_ref then
+					ret = "  ${" .. rc.name .. "_len} = "
+					-- look for related 'var_out'.
+					local rc_val = parent.var_map[rc.name]
+					if rc_val then
+						rc_val.has_length = true
+					else
+						-- related 'var_out' not processed yet.
+						-- add place-holder
+						parent.var_map[rc.name] = rc
+					end
+				else
+					ret = "  ${" .. rc.name .. "} = "
+					-- look for related length reference.
+					local rc_len = parent.var_map[rc.name]
+					if rc_len and rc_len.is_length_ref then
+						-- we have a length.
+						rc.has_length = true
+						-- remove length var place-holder
+						parent.var_map[rc.name] = nil
+					end
+					-- register var_out variable.
+					parent:add_variable(rc)
+					-- add var_out record to parent
+					parent:add_record(rc)
+				end
+				-- check for dereference.
+				if rc.wrap == '*' then
+					ret = ret .. '*'
+				end
 			end
 		else
 			ret = "  "

@@ -2068,6 +2068,9 @@ var_in = function(self, rec, parent)
 	end
 end,
 var_out = function(self, rec, parent)
+	if rec.is_length_ref then
+		return
+	end
 	local flags
 	if rec.is_this or rec.own then
 		-- add flags ${var_name_flags} variable
