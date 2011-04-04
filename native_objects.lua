@@ -496,7 +496,6 @@ local function parse_variable_name(var)
 			end
 			break
 		elseif tok == '!' then
-			assert(var._rec_type == 'var_out', "Only output variables can be marked as 'owned'.")
 			var.own = true
 		elseif tok == '@' then
 			var.is_ref_field = true
@@ -517,6 +516,10 @@ local function parse_variable_name(var)
 			var._rec_type = 'var_out'
 			var.is_temp = true
 		end
+	end
+	-- do some validation.
+	if var.own then
+		assert(var._rec_type == 'var_out', "Only output variables can be marked as 'owned'.")
 	end
 end
 
