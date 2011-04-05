@@ -559,6 +559,14 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 		lua_pushcfunction(L, reg_list[0].func); /* push first constructor function. */
 		lua_pushcclosure(L, obj_constructor_call_wrapper, 1); /* make __call wrapper. */
 		lua_rawset(L, -3);         /* metatable.__call = <default constructor> */
+
+#if OBJ_DATA_HIDDEN_METATABLE
+		lua_pushliteral(L, "__metatable");
+		lua_pushvalue(L, -3);      /* dup. public API table. */
+		lua_rawset(L, -3);         /* metatable.__metatable = <public API table> */
+#endif
+
+		/* setmetatable on public API table. */
 		lua_setmetatable(L, -2);
 
 		lua_pop(L, 1); /* pop public API table, don't need it any more. */
