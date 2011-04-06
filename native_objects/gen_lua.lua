@@ -887,11 +887,6 @@ typedef struct obj_udata {
 
 ]]
 
-local obj_type_ptr = ffi.typeof"obj_type *"
-local obj_udata_ptr = ffi.typeof"obj_udata *"
-local obj_simple_udata_ptr = ffi.typeof"void *"
-local obj_udata_size = ffi.sizeof"obj_udata"
-
 -- cache mapping of cdata to userdata
 local weak_objects = setmetatable({}, { __mode = "v" })
 
@@ -899,7 +894,7 @@ local function obj_udata_luacheck_internal(obj, type_mt)
 	local obj_mt = d_getmetatable(obj)
 	if obj_mt == type_mt then
 		-- convert userdata to cdata.
-		return obj_udata_ptr(obj)
+		return ffi.cast("obj_udata *", obj)
 	end
 	error("(expected `" .. type_mt['.name'] .. "`, got " .. type(obj) .. ")", 3)
 end
@@ -933,8 +928,8 @@ local function obj_udata_luapush(obj, type_mt, obj_type, flags)
 	end
 
 	-- create new userdata
-	ud_obj = udata_new(obj_udata_size, type_mt)
-	local ud = obj_udata_ptr(ud_obj)
+	ud_obj = udata_new(ffi.sizeof"obj_udata", type_mt)
+	local ud = ffi.cast("obj_udata *", ud_obj)
 	-- init. object
 	ud.obj = obj
 	ud.flags = flags
@@ -974,8 +969,8 @@ local function obj_udata_luapush_weak(obj, type_mt, obj_type, flags)
 	if ud_obj ~= nil then return ud_obj end
 
 	-- create new userdata
-	ud_obj = udata_new(obj_udata_size, type_mt)
-	local ud = obj_udata_ptr(ud_obj)
+	ud_obj = udata_new(ffi.sizeof"obj_udata", type_mt)
+	local ud = ffi.cast("obj_udata *", ud_obj)
 	-- init. object
 	ud.obj = obj
 	ud.flags = flags
@@ -990,7 +985,7 @@ local function obj_simple_udata_luacheck(ud_obj, type_mt)
 	local obj_mt = d_getmetatable(ud_obj)
 	if obj_mt == type_mt then
 		-- convert userdata to cdata.
-		return obj_simple_udata_ptr(ud_obj)
+		return ffi.cast("void *", ud_obj)
 	end
 	error("(expected `" .. type_mt['.name'] .. "`, got " .. type(ud_obj) .. ")", 3)
 end
@@ -1007,7 +1002,7 @@ local function obj_simple_udata_luapush(c_obj, size, type_mt)
 
 	-- create new userdata
 	ud_obj = udata_new(size, type_mt)
-	local cdata = obj_simple_udata_ptr(ud_obj)
+	local cdata = ffi.cast("void *", ud_obj)
 	-- init. object
 	ffi.copy(cdata, c_obj, size)
 
@@ -1019,7 +1014,14 @@ end
 -- templates for typed *_check/*_delete/*_push functions
 local ffi_obj_type_check_delete_push = {
 ['simple'] = [[
-local function obj_type_${object_name}_check(ud_obj)
+local obj_type_${object_name}_check
+local obj_type_${object_name}_delete
+local obj_type_${object_name}_push
+
+(function()
+local ${object_name}_mt = _priv.${object_name}
+local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+function obj_type_${object_name}_check(ud_obj)
 	local c_obj = ${object_name}_objects[ud_obj]
 	if c_obj == nil then
 		-- cdata object not in cache
@@ -1030,21 +1032,29 @@ local function obj_type_${object_name}_check(ud_obj)
 	return c_obj
 end
 
-local function obj_type_${object_name}_delete(ud_obj)
+function obj_type_${object_name}_delete(ud_obj)
 	${object_name}_objects[ud_obj] = nil
 	return obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
 end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-local function obj_type_${object_name}_push(c_obj)
+function obj_type_${object_name}_push(c_obj)
 	local ud_obj, cdata = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
 	${object_name}_objects[ud_obj] = cdata
 	return ud_obj
 end
+end)()
 
 ]],
 ['embed'] = [[
-local function obj_type_${object_name}_check(ud_obj)
+local obj_type_${object_name}_check
+local obj_type_${object_name}_delete
+local obj_type_${object_name}_push
+
+(function()
+local ${object_name}_mt = _priv.${object_name}
+local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+function obj_type_${object_name}_check(ud_obj)
 	local c_obj = ${object_name}_objects[ud_obj]
 	if c_obj == nil then
 		-- cdata object not in cache
@@ -1055,21 +1065,29 @@ local function obj_type_${object_name}_check(ud_obj)
 	return c_obj
 end
 
-local function obj_type_${object_name}_delete(ud_obj)
+function obj_type_${object_name}_delete(ud_obj)
 	${object_name}_objects[ud_obj] = nil
 	return obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
 end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-local function obj_type_${object_name}_push(c_obj)
+function obj_type_${object_name}_push(c_obj)
 	local ud_obj, cdata = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
 	${object_name}_objects[ud_obj] = cdata
 	return ud_obj
 end
+end)()
 
 ]],
 ['cast pointer'] = [[
-local function obj_type_${object_name}_check(ud_obj)
+local obj_type_${object_name}_check
+local obj_type_${object_name}_delete
+local obj_type_${object_name}_push
+
+(function()
+local ${object_name}_mt = _priv.${object_name}
+local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+function obj_type_${object_name}_check(ud_obj)
 	local c_obj = ${object_name}_objects[ud_obj]
 	if c_obj == nil then
 		-- cdata object not in cache
@@ -1080,7 +1098,7 @@ local function obj_type_${object_name}_check(ud_obj)
 	return c_obj
 end
 
-local function obj_type_${object_name}_delete(ud_obj)
+function obj_type_${object_name}_delete(ud_obj)
 	local c_obj = ${object_name}_objects[ud_obj]
 	${object_name}_objects[ud_obj] = nil
 	local c_ptr, flags = obj_udata_luadelete(ud_obj, ${object_name}_mt)
@@ -1090,16 +1108,25 @@ local function obj_type_${object_name}_delete(ud_obj)
 	return c_obj, flags
 end
 
-local function obj_type_${object_name}_push(c_obj, flags)
+local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
+function obj_type_${object_name}_push(c_obj, flags)
 	local ud_obj = obj_udata_luapush(ffi.cast('void *', c_obj), ${object_name}_mt,
 		${object_name}_type, flags)
 	${object_name}_objects[ud_obj] = c_obj
 	return ud_obj
 end
+end)()
 
 ]],
 ['generic'] = [[
-local function obj_type_${object_name}_check(ud_obj)
+local obj_type_${object_name}_check
+local obj_type_${object_name}_delete
+local obj_type_${object_name}_push
+
+(function()
+local ${object_name}_mt = _priv.${object_name}
+local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+function obj_type_${object_name}_check(ud_obj)
 	local c_obj = ${object_name}_objects[ud_obj]
 	if c_obj == nil then
 		-- cdata object not in cache
@@ -1110,20 +1137,29 @@ local function obj_type_${object_name}_check(ud_obj)
 	return c_obj
 end
 
-local function obj_type_${object_name}_delete(ud_obj)
+function obj_type_${object_name}_delete(ud_obj)
 	${object_name}_objects[ud_obj] = nil
 	return obj_udata_luadelete(ud_obj, ${object_name}_mt)
 end
 
-local function obj_type_${object_name}_push(c_obj, flags)
+local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
+function obj_type_${object_name}_push(c_obj, flags)
 	local ud_obj = obj_udata_luapush(c_obj, ${object_name}_mt, ${object_name}_type, flags)
 	${object_name}_objects[ud_obj] = c_obj
 	return ud_obj
 end
+end)()
 
 ]],
 ['generic_weak'] = [[
-local function obj_type_${object_name}_check(ud_obj)
+local obj_type_${object_name}_check
+local obj_type_${object_name}_delete
+local obj_type_${object_name}_push
+
+(function()
+local ${object_name}_mt = _priv.${object_name}
+local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+function obj_type_${object_name}_check(ud_obj)
 	local c_obj = ${object_name}_objects[ud_obj]
 	if c_obj == nil then
 		-- cdata object not in cache
@@ -1134,45 +1170,39 @@ local function obj_type_${object_name}_check(ud_obj)
 	return c_obj
 end
 
-local function obj_type_${object_name}_delete(ud_obj)
+function obj_type_${object_name}_delete(ud_obj)
 	${object_name}_objects[ud_obj] = nil
 	return obj_udata_luadelete_weak(ud_obj, ${object_name}_mt)
 end
 
-local function obj_type_${object_name}_push(c_obj, flags)
+local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
+function obj_type_${object_name}_push(c_obj, flags)
 	local ud_obj = obj_udata_luapush_weak(c_obj, ${object_name}_mt, ${object_name}_type, flags)
 	${object_name}_objects[ud_obj] = c_obj
 	return ud_obj
 end
+end)()
 
 ]],
 }
 
 -- module template
 local ffi_module_template = [[
-local ${module_c_name}_mt = _M
-local ${module_c_name}_meth = _M
-local ${module_c_name}_func = _M
-local ${object_name}_pub = _M
+local _pub = {}
+local _meth = {}
+for obj_name,mt in pairs(_priv) do
+	if type(mt) == 'table' and mt.__index then
+		_meth[obj_name] = mt.__index
+	end
+end
+_pub.${object_name} = _M
+for obj_name,pub in pairs(_M) do
+	_pub[obj_name] = pub
+end
 
 ]]
 
-local ffi_submodule_template = [[
-local ${module_c_name}_${object_name}_mt = _M
-local ${module_c_name}_${object_name}_meth = _M
-local ${module_c_name}_${object_name}_func = _M
-local ${object_name}_pub = _M
-
-]]
-
-local ffi_object_template = [[
-local ${object_name}_pub = _M["${object_name}"]
-local ${object_name}_mt = _priv["${object_name}"]
-local ${object_name}_type = obj_type_ptr(${object_name}_mt[".type"])
-local ${object_name}_meth = ${object_name}_mt.__index
-local ${object_name}_objects = setmetatable({}, { __mode = "k" })
-
-]]
+local ffi_submodule_template = ffi_module_template
 
 -- re-map meta-methods.
 local lua_meta_methods = {
@@ -1275,7 +1305,7 @@ local function reg_object_function(self, func, object)
 		end
 		if func._is_hidden then
 			-- don't register '__gc' metamethods as a public object method.
-			return '_mt', '__gc'
+			return '_priv', '__gc'
 		end
 		-- also register as a normal method.
 		reg_list = object.methods_regs
@@ -1284,7 +1314,7 @@ local function reg_object_function(self, func, object)
 		ffi_table = '_pub'
 	elseif func._is_meta_method then
 		reg_list = "metas_regs"
-		ffi_table = '_mt'
+		ffi_table = '_priv'
 		-- use Lua's __* metamethod names
 		name = lua_meta_methods[func.name]
 	elseif func._is_method then
@@ -1521,7 +1551,6 @@ object_end = function(self, rec, parent)
 	})
 	-- create FFI check/delete/push functions
 	rec:write_part("ffi_obj_type", {
-		ffi_object_template,
 		ffi_obj_type_check_delete_push[ud_type],
 		'\n'
 	})
@@ -1741,11 +1770,11 @@ extends = function(self, rec, parent)
 				local ffi_table, name = reg_object_function(self, val, parent)
 				-- write ffi code to remove registered base class method.
 				parent:write_part("ffi_src",
-				{'${object_name}',ffi_table,'.', name, ' = nil\n'})
+				{ffi_table,'.${object_name}.', name, ' = nil\n'})
 				-- write ffi code to copy method from base class.
 				parent:write_part("ffi_extends",
-				{'${object_name}',ffi_table,'.',name,' = ',
-					base.name,ffi_table,'.',name,'\n'})
+				{ffi_table,'.${object_name}.',name,' = ',
+					ffi_table,'.',base.name,'.',name,'\n'})
 			elseif val._rec_type == 'field' then
 				parent.fields[name] = val
 			elseif val._rec_type == 'const' then
@@ -1941,7 +1970,7 @@ c_function = function(self, rec, parent)
 	-- generate FFI function
 	rec:write_part("ffi_pre",
 	{'-- method: ', name, '\n',
-		'function ${object_name}',ffi_table,'.', name, '(',rec.ffi_params,')\n'})
+		'function ',ffi_table,'.${object_name}.', name, '(',rec.ffi_params,')\n'})
 end,
 c_function_end = function(self, rec, parent)
 	-- is this a wrapper function
