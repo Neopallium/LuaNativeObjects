@@ -562,8 +562,8 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 
 #if OBJ_DATA_HIDDEN_METATABLE
 		lua_pushliteral(L, "__metatable");
-		lua_pushvalue(L, -3);      /* dup. public API table. */
-		lua_rawset(L, -3);         /* metatable.__metatable = <public API table> */
+		lua_pushboolean(L, 0);
+		lua_rawset(L, -3);         /* metatable.__metatable = false */
 #endif
 
 		/* setmetatable on public API table. */
@@ -574,6 +574,11 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 		lua_newtable(L);
 	} else {
 		/* register all methods as public functions. */
+#if OBJ_DATA_HIDDEN_METATABLE
+		lua_pop(L, 1); /* pop public API table, don't need it any more. */
+		/* create methods table. */
+		lua_newtable(L);
+#endif
 	}
 
 	luaL_register(L, NULL, type_reg->methods); /* fill methods table. */
@@ -614,9 +619,9 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 	lua_rawset(L, -3);                  /* metatable.__index = methods */
 #if OBJ_DATA_HIDDEN_METATABLE
 	lua_pushliteral(L, "__metatable");
-	lua_pushvalue(L, -3);               /* dup methods table */
+	lua_pushboolean(L, 0);
 	lua_rawset(L, -3);                  /* hide metatable:
-	                                       metatable.__metatable = methods */
+	                                       metatable.__metatable = false */
 #endif
 	lua_pop(L, 2);                      /* drop metatable & methods */
 }
