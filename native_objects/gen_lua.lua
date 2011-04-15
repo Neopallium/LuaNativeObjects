@@ -1350,6 +1350,9 @@ c_module = function(self, rec, parent)
 	self._modules_out[rec.name] = rec
 	rec:write_part("typedefs", obj_udata_types)
 	-- start obj_type array
+	rec:write_part('obj_types',
+		{'static obj_type obj_types[] = {\n'})
+	-- start module/object register array.
 	rec:write_part("reg_sub_modules",
 		{'static const reg_sub_module reg_sub_modules[] = {\n'})
 	-- start submodule_libs array
@@ -1388,6 +1391,11 @@ c_module = function(self, rec, parent)
 end,
 c_module_end = function(self, rec, parent)
 	-- end obj_type array
+	rec:write_part('obj_types',{
+	'  {NULL, -1, 0, NULL},\n',
+	'};\n'
+	})
+	-- end module/object register array.
 	rec:write_part("reg_sub_modules", {
 	'  {NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL}\n',
 	'};\n\n'
@@ -1541,22 +1549,18 @@ object_end = function(self, rec, parent)
 	if rec.has_dyn_caster then
 		dyn_caster = rec.has_dyn_caster.dyn_caster_name
 	end
-	-- create name for obj_type id.
-	rec:write_part("obj_type_ids", {
-	'#define obj_type_id_${object_name} ', rec._obj_id, '\n',
-	})
 	-- create check/delete/push macros
 	local ud_type = rec.userdata_type
 	if not rec.no_weak_ref then
 		ud_type = ud_type .. '_weak'
 	end
-	rec:write_part("obj_type_ids", {
-		obj_type_check_delete_push[ud_type],
+	rec:write_part("obj_check_delete_push", {
+		rec.c_custom_check_delete_push or obj_type_check_delete_push[ud_type],
 		'\n'
 	})
 	-- create FFI check/delete/push functions
 	rec:write_part("ffi_obj_type", {
-		ffi_obj_type_check_delete_push[ud_type],
+		rec.ffi_custom_check_delete_push or ffi_obj_type_check_delete_push[ud_type],
 		'\n'
 	})
 	-- object type flags
@@ -1573,10 +1577,11 @@ object_end = function(self, rec, parent)
 		flags = '0'
 	end
 	-- build obj_type info.
-	rec:write_part('obj_types',
-		{'static obj_type ', rec._obj_type_name,
-		' = { ', dyn_caster, ', ', rec._obj_id ,
-		', ',flags,', "${object_name}" };\n'})
+	rec:write_part('obj_types', {
+	'#define obj_type_id_${object_name} ', rec._obj_id, '\n',
+	'#define ', rec._obj_type_name, ' (obj_types[obj_type_id_${object_name}])\n',
+	'  { ', dyn_caster, ', ', rec._obj_id , ', ',flags,', "${object_name}" },\n'
+	})
 	if not rec.is_package then
 		-- check if object has a '__str__' method.
 		if rec.functions['__str__'] == nil and rec.functions['__tostring'] == nil then
@@ -1708,7 +1713,7 @@ object_end = function(self, rec, parent)
 	}
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = { "defines", "funcdefs", "methods", "obj_type_ids",
+	local parts = { "defines", "funcdefs", "methods", "obj_check_delete_push",
 		"obj_types", "reg_arrays", "reg_sub_modules", "submodule_regs", "submodule_libs",
 		"luaopen_defs", "luaopen", "extra_code" }
 	rec:vars_parts(parts)
@@ -2287,10 +2292,10 @@ for name,mod in pairs(parsed._modules_out) do
 			"includes",
 			"defines",
 			"typedefs",
-			"obj_type_ids",
 			"funcdefs",
 			"obj_types",
 			"helper_funcs",
+			"obj_check_delete_push",
 			"ffi_code",
 			"extra_code",
 			"methods",
