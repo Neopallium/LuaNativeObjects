@@ -841,14 +841,14 @@ LUALIB_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 -- FFI templates
 --
 local ffi_helper_code = [===[
+local error = error
+local type = type
+local tonumber = tonumber
+local tostring = tostring
+
 -- try loading luajit's ffi
 local stat, ffi=pcall(require,"ffi")
 if not stat then
-	return
-end
--- check if ffi is disabled.
-if disable_ffi then
-	print("FFI disabled: Using standard Lua api interface.")
 	return
 end
 
@@ -933,7 +933,7 @@ local function obj_udata_luapush(obj, type_mt, obj_type, flags)
 	end
 
 	-- create new userdata
-	ud_obj = udata_new(ffi.sizeof"obj_udata", type_mt)
+	local ud_obj = udata_new(ffi.sizeof"obj_udata", type_mt)
 	local ud = ffi.cast("obj_udata *", ud_obj)
 	-- init. object
 	ud.obj = obj
@@ -1006,7 +1006,7 @@ local function obj_simple_udata_luapush(c_obj, size, type_mt)
 	if c_obj == nil then return end
 
 	-- create new userdata
-	ud_obj = udata_new(size, type_mt)
+	local ud_obj = udata_new(size, type_mt)
 	local cdata = ffi.cast("void *", ud_obj)
 	-- init. object
 	ffi.copy(cdata, c_obj, size)
