@@ -54,7 +54,11 @@ typedef int bool;
 
 #define FUNC_UNUSED
 
+#define LUA_NOBJ_API __declspec(dllexport)
+
 #else
+
+#define LUA_NOBJ_API LUALIB_API
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -755,7 +759,7 @@ static void create_object_instance_cache(lua_State *L) {
 ]]
 
 local luaopen_main = [[
-LUALIB_API int luaopen_${module_c_name}(lua_State *L) {
+LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 	const reg_sub_module *reg = reg_sub_modules;
 	const luaL_Reg *submodules = submodule_libs;
 	int priv_table = -1;
@@ -802,7 +806,7 @@ LUALIB_API int luaopen_${module_c_name}(lua_State *L) {
 ]]
 
 local luaopen_submodule = [[
-LUALIB_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
+LUA_NOBJ_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	const reg_sub_module *reg = &(submodule_${object_name}_reg);
 	const luaL_Reg null_reg_list = { NULL, NULL };
 	int priv_table = -1;
