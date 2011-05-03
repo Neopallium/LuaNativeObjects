@@ -2176,7 +2176,7 @@ var_out = function(self, rec, parent)
 			parent:write_part("post", {
 			'  /* check for error. */\n',
 			'  if(',err_type.is_error_check(error_code),') {\n',
-			'    lua_pushboolean(L, 0);\n',
+			'    lua_pushnil(L);\n',
 			'    ', lua:_push(rec, flags),
 			'  } else {\n',
 			'    lua_pushboolean(L, 1);\n',
@@ -2188,8 +2188,8 @@ var_out = function(self, rec, parent)
 				'  -- check for error.\n',
 				'  local ${', rec.name,'}_err\n',
 				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
-				'    ${', rec.name ,'} = false\n',
 				'    ${', rec.name, '}_err = ', lua:_ffi_push(rec, flags),
+				'    ${', rec.name ,'} = nil\n',
 				'  else\n',
 				'    ${', rec.name ,'} = true\n',
 				'  end\n',
