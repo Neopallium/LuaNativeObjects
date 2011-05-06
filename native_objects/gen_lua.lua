@@ -1578,15 +1578,17 @@ object_end = function(self, rec, parent)
 	if not rec.no_weak_ref then
 		ud_type = ud_type .. '_weak'
 	end
-	rec:write_part("obj_check_delete_push", {
-		rec.c_custom_check_delete_push or obj_type_check_delete_push[ud_type],
-		'\n'
-	})
-	-- create FFI check/delete/push functions
-	rec:write_part("ffi_obj_type", {
-		rec.ffi_custom_check_delete_push or ffi_obj_type_check_delete_push[ud_type],
-		'\n'
-	})
+	if not rec.is_package then
+		rec:write_part("obj_check_delete_push", {
+			rec.c_custom_check_delete_push or obj_type_check_delete_push[ud_type],
+			'\n'
+		})
+		-- create FFI check/delete/push functions
+		rec:write_part("ffi_obj_type", {
+			rec.ffi_custom_check_delete_push or ffi_obj_type_check_delete_push[ud_type],
+			'\n'
+		})
+	end
 	-- object type flags
 	local flags = {}
 	if not rec.no_weak_ref then
