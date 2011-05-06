@@ -1388,9 +1388,17 @@ c_module = function(self, rec, parent)
 	-- symbols to export to FFI
 	rec:write_part("ffi_export",
 		{'static const ffi_export_symbol ${module_c_name}_ffi_export[] = {\n'})
-	-- start ffi.cdef code block
+	-- start two ffi.cdef code blocks (one for typedefs and one for function prototypes).
+	rec:write_part("ffi_typedef", {
+	'ffi.cdef[[\n'
+	})
 	rec:write_part("ffi_cdef", {
 	'ffi.cdef[[\n'
+	})
+	-- add module's FFI template
+	rec:write_part("ffi_obj_type", {
+		ffi_module_template,
+		'\n'
 	})
 end,
 c_module_end = function(self, rec, parent)
@@ -1419,7 +1427,10 @@ c_module_end = function(self, rec, parent)
 	'  {NULL, NULL}\n',
 	'};\n\n'
 	})
-	-- end ffi.cdef code block
+	-- end ffi.cdef code blocks
+	rec:write_part("ffi_typedef", {
+	'\n]]\n\n'
+	})
 	rec:write_part("ffi_cdef", {
 	'\n]]\n\n'
 	})
@@ -1440,13 +1451,8 @@ c_module_end = function(self, rec, parent)
 	rec:write_part("helper_funcs", objHelperFunc)
 	-- encode luajit ffi code
 	if rec.luajit_ffi then
-		-- add module's FFI template
-		rec:write_part("ffi_obj_type", {
-			ffi_module_template,
-			'\n'
-		})
 		local ffi_code = ffi_helper_code .. rec:dump_parts{
-			"ffi_cdef", "ffi_obj_type", "ffi_src", "ffi_extends" }
+			"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src", "ffi_extends" }
 		rec:write_part("ffi_code",
 		{'\nstatic const char ${module_c_name}_ffi_lua_code[] = ', dump_lua_code_to_c_str(ffi_code)
 		})
@@ -1508,6 +1514,7 @@ end
 	if self._cur_module.ffi_manual_bindings then return end
 
 	parent:write_part("ffi_src", rec:dump_parts{ "ffi_src" })
+	parent:write_part("ffi_typedef", rec:dump_parts{ "ffi_typedef" })
 	parent:write_part("ffi_cdef", rec:dump_parts{ "ffi_cdef" })
 end,
 object = function(self, rec, parent)
@@ -1541,11 +1548,24 @@ object = function(self, rec, parent)
 		-- symbols to export to FFI
 		rec:write_part("ffi_export",
 			{'\nstatic const ffi_export_symbol ${module_c_name}_${object_name}_ffi_export[] = {\n'})
-		-- start ffi.cdef code block
+		-- start two ffi.cdef code blocks (one for typedefs and one for function prototypes).
+		rec:write_part("ffi_typedef", {
+		'ffi.cdef[[\n'
+		})
 		rec:write_part("ffi_cdef", {
 		'ffi.cdef[[\n'
 		})
+		-- add module's FFI template
+		rec:write_part("ffi_obj_type", {
+			ffi_submodule_template,
+			'\n'
+		})
 	end
+	-- FFI typedef
+	local ffi_type = rec.ffi_type or 'struct ${object_name}'
+	rec:write_part("ffi_typedef", {
+		'typedef ', ffi_type, ' ${object_name};\n',
+	})
 end,
 object_end = function(self, rec, parent)
 	-- check for dyn_caster
@@ -1660,17 +1680,15 @@ object_end = function(self, rec, parent)
 			'  {NULL, NULL}\n',
 			'};\n\n'
 			})
-			-- end ffi.cdef code block
+			-- end ffi.cdef code blocks
+			rec:write_part("ffi_typedef", {
+			'\n]]\n\n'
+			})
 			rec:write_part("ffi_cdef", {
 			'\n]]\n\n'
 			})
-			-- add module's FFI template
-			rec:write_part("ffi_obj_type", {
-				ffi_submodule_template,
-				'\n'
-			})
 			local ffi_code = ffi_helper_code .. rec:dump_parts{
-				"ffi_cdef", "ffi_obj_type", "ffi_src", "ffi_extends" }
+				"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src", "ffi_extends" }
 			rec:write_part("ffi_code",
 			{'\nstatic const char ${module_c_name}_${object_name}_ffi_lua_code[] = ',
 				dump_lua_code_to_c_str(ffi_code)
@@ -1704,7 +1722,7 @@ object_end = function(self, rec, parent)
 		if self._cur_module.ffi_manual_bindings then return end
 
 		-- copy generated FFI bindings to parent
-		local ffi_parts = { "ffi_cdef", "ffi_src", "ffi_extends" }
+		local ffi_parts = { "ffi_typedef", "ffi_cdef", "ffi_import", "ffi_src", "ffi_extends" }
 		rec:vars_parts(ffi_parts)
 		parent:copy_parts(rec, ffi_parts)
 	end
@@ -1744,7 +1762,7 @@ callback_state_end = function(self, rec, parent)
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "wrapper_obj" })
 	-- apply variables to parts
-	local parts = {"funcdefs", "methods", "extra_code", "ffi_cdef", "ffi_src"}
+	local parts = {"funcdefs", "methods", "extra_code", "ffi_typedef", "ffi_cdef", "ffi_src"}
 	rec:vars_parts(parts)
 	-- copy parts to parent
 	parent:copy_parts(rec, parts)

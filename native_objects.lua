@@ -591,6 +591,28 @@ end
 end
 end
 
+function c_macro_call(ret)
+	return function (cfunc)
+	return function (params)
+	local rec = c_call(ret)(cfunc)(params)
+	rec.ffi_need_wrapper = true
+	rec.is_macro_call = true
+	return rec
+end
+end
+end
+
+function c_inline_call(ret)
+	return function (cfunc)
+	return function (params)
+	local rec = c_call(ret)(cfunc)(params)
+	rec.ffi_need_wrapper = true
+	rec.is_inline_call = true
+	return rec
+end
+end
+end
+
 function c_method_call(ret)
 	return function (cfunc)
 	return function (params)
@@ -747,6 +769,10 @@ function ffi_source(part)
 	rec.src = src
 	return rec
 end
+end
+
+function ffi_typedef(cdef)
+	return ffi_source("ffi_typedef")(cdef)
 end
 
 function ffi_cdef(cdef)
@@ -1011,6 +1037,72 @@ local function process_module_file(file)
 	}
 
 	--
+	-- Create FFI-wrappers for inline/macro calls
+	--
+	process_records{
+	c_call = function(self, rec, parent)
+		if not rec.ffi_need_wrapper then
+			-- normal C call don't need wrapper.
+			return
+		end
+		-- find parent 'object' record.
+		local object = parent
+		while object._rec_type ~= 'object' do
+			object = object._parent
+			assert(object, "Can't find parent 'object' record of 'c_call'")
+		end
+		local ret_type = rec.ret
+		local ret = ret_type
+		-- convert return type into "var_out" if it's not a "void" type.
+		if ret ~= "void" then
+			if type(ret) ~= 'string' then
+				ret_type = ret.c_type
+			end
+			ret = "  return "
+		else
+			ret_type = "void"
+			ret = "  "
+		end
+		-- build C call statement.
+		local call = {}
+		call[#call+1] = ret
+		call[#call+1] = rec.cfunc
+		-- process parameters.
+		local params = {}
+		local list = rec.params
+		params[#params+1] = "("
+		call[#call+1] = "("
+		for i=1,#list,2 do
+			local c_type = list[i]
+			local name = list[i+1]
+			if i > 1 then
+				params[#params+1] = ", "
+				call[#call+1] = ", "
+			end
+			-- append parameter name
+			call[#call+1] = name
+			-- append parameter type & name to cdef
+			params[#params+1] = c_type .. ' '
+			params[#params+1] = name
+		end
+		params[#params+1] = ")"
+		call[#call+1] = ");\n"
+		-- convert 'params' to string.
+		params = tconcat(params)
+		call = tconcat(call)
+		-- create wrapper function
+		local wrap_name = "ffi_wrapper_" .. rec.cfunc
+		object:add_record(c_source("src")({
+		"\n/* FFI wrapper for inline/macro call */\n",
+		"static ", ret_type, " ", wrap_name, params, " {\n",
+		call,
+		"}\n",
+		}))
+		object:add_record(ffi_export_function(ret_type)(wrap_name)(params))
+	end,
+	}
+
+	--
 	-- do some pre-processing of records.
 	--
 	process_records{
@@ -1188,7 +1280,12 @@ local function process_module_file(file)
 		local func_start = rec.cfunc .. "("
 		src[#src+1] = func_start
 		ffi_cdef[#ffi_cdef+1] = func_start
-		ffi_src[#ffi_src+1] = "C." .. func_start
+		if not rec.ffi_need_wrapper then
+			ffi_src[#ffi_src+1] = "C."
+		else
+			ffi_src[#ffi_src+1] = "ffi_wrapper_"
+		end
+		ffi_src[#ffi_src+1] = func_start
 		-- convert params to "var_in" records.
 		local params = {}
 		local list = rec.params
@@ -1269,7 +1366,7 @@ local function process_module_file(file)
 		ffi_src[#ffi_src+1] = '"])\n'
 		-- insert FFI source record.
 		local idx = parent:find_record(rec)
-		parent:insert_record(ffi_source("ffi_src")(ffi_src), idx)
+		parent:insert_record(ffi_source("ffi_import")(ffi_src), idx)
 	end,
 	ffi_export_function = function(self, rec, parent)
 		local ffi_cdef={}
@@ -1305,7 +1402,7 @@ local function process_module_file(file)
 		-- insert FFI source record.
 		local idx = parent:find_record(rec)
 		parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
-		parent:insert_record(ffi_source("ffi_src")(ffi_src), idx+1)
+		parent:insert_record(ffi_source("ffi_import")(ffi_src), idx+1)
 	end,
 	}
 
