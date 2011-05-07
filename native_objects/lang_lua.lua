@@ -81,7 +81,12 @@ process_records{
 		local l_type = lua_base_types[rec.lang_type]
 		if l_type ~= nil then
 			rec._ffi_push = function(self, var)
-				return '${' .. var.name .. '}\n'
+				local wrap = var.ffi_wrap
+				if wrap then
+					return wrap .. '(${' .. var.name .. '})\n'
+				else
+					return '${' .. var.name .. '}\n'
+				end
 			end
 			if rec.lang_type == 'string' then
 				rec._to = function(self, var)
