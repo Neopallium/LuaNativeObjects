@@ -42,6 +42,7 @@ local obj_udata_types = [[
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 
 #ifdef _MSC_VER
 #define __WINDOWS__
@@ -56,6 +57,20 @@ local obj_udata_types = [[
 /* for MinGW32 compiler need to include <stdint.h> */
 #ifdef __GNUC__
 #include <stdint.h>
+#endif
+
+/* wrap strerror_s(). */
+#ifdef __GNUC__
+#ifndef strerror_r
+#define strerror_r(errno, buf, buflen) do { \
+	strncpy((buf), strerror(errno), (buflen)-1); \
+	(buf)[(buflen)-1] = '\0'; \
+} while(0)
+#endif
+#else
+#ifndef strerror_r
+#define strerror_r(errno, buf, buflen) strerror_s((buf), (buflen), (errno))
+#endif
 #endif
 
 /* define some standard types missing on Windows. */
