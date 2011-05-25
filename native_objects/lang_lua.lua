@@ -160,7 +160,7 @@ process_records{
 					return '\n'
 				end
 				rec._ffi_opt = function(self, var, default)
-					default = default or '0'
+					default = tostring(default or '0')
 					return 
 						'  ${' .. var.name .. '} = ${' .. var.name .. '} or ' .. default .. '\n'
 				end
