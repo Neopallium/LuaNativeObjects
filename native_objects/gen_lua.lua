@@ -2197,6 +2197,9 @@ var_out = function(self, rec, parent)
 	-- don't generate code for '<any>' type parameters
 	if rec.c_type == '<any>' then
 		parent.pushed_values = parent.pushed_values + 1
+		parent:write_part("ffi_pre",
+			{'  local ${', rec.name, '}\n'})
+		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 		return
 	end
 
