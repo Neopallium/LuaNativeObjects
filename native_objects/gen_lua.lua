@@ -887,6 +887,7 @@ local error = error
 local type = type
 local tonumber = tonumber
 local tostring = tostring
+local rawset = rawset
 
 -- try loading luajit's ffi
 local stat, ffi=pcall(require,"ffi")
@@ -949,6 +950,14 @@ end
 local function obj_udata_luacheck(obj, type_mt)
 	local ud = obj_udata_luacheck_internal(obj, type_mt)
 	return ud.obj
+end
+
+local function obj_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
+	-- convert userdata to cdata.
+	local c_obj = ffi.cast(c_type, obj_udata_luacheck(ud_obj, ud_mt))
+	-- cache converted cdata
+	rawset(objects, ud_obj, c_obj)
+	return c_obj
 end
 
 local function obj_udata_luadelete(ud_obj, type_mt)
@@ -1037,6 +1046,14 @@ local function obj_simple_udata_luacheck(ud_obj, type_mt)
 	error("(expected `" .. type_mt['.name'] .. "`, got " .. type(ud_obj) .. ")", 3)
 end
 
+local function obj_simple_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
+	-- convert userdata to cdata.
+	local c_obj = ffi.cast(c_type, obj_simple_udata_luacheck(ud_obj, ud_mt))
+	-- cache converted cdata
+	rawset(objects, ud_obj, c_obj)
+	return c_obj
+end
+
 local function obj_simple_udata_luadelete(ud_obj, type_mt)
 	local c_obj = obj_simple_udata_luacheck(ud_obj, type_mt)
 	-- invalid userdata, by setting the metatable to nil.
@@ -1067,16 +1084,13 @@ local obj_type_${object_name}_push
 
 (function()
 local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+local ${object_name}_objects = setmetatable({}, { __mode = "k",
+__index = function(objects, ud_obj)
+	return obj_simple_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
+end,
+})
 function obj_type_${object_name}_check(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	if c_obj == nil then
-		-- cdata object not in cache
-		c_obj = obj_simple_udata_luacheck(ud_obj, ${object_name}_mt)
-		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
-		${object_name}_objects[ud_obj] = c_obj
-	end
-	return c_obj
+	return ${object_name}_objects[ud_obj]
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1100,16 +1114,13 @@ local obj_type_${object_name}_push
 
 (function()
 local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+local ${object_name}_objects = setmetatable({}, { __mode = "k",
+__index = function(objects, ud_obj)
+	return obj_simple_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
+end,
+})
 function obj_type_${object_name}_check(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	if c_obj == nil then
-		-- cdata object not in cache
-		c_obj = obj_simple_udata_luacheck(ud_obj, ${object_name}_mt)
-		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
-		${object_name}_objects[ud_obj] = c_obj
-	end
-	return c_obj
+	return ${object_name}_objects[ud_obj]
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1133,16 +1144,17 @@ local obj_type_${object_name}_push
 
 (function()
 local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k" })
-function obj_type_${object_name}_check(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	if c_obj == nil then
-		-- cdata object not in cache
-		c_obj = tonumber(ffi.cast('uintptr_t', obj_udata_luacheck(ud_obj, ${object_name}_mt)))
-		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
-		${object_name}_objects[ud_obj] = c_obj
-	end
+local ${object_name}_objects = setmetatable({}, { __mode = "k",
+__index = function(objects, ud_obj)
+	-- cdata object not in cache
+	local c_obj = tonumber(ffi.cast('uintptr_t', obj_udata_luacheck(ud_obj, ${object_name}_mt)))
+	c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
+	rawset(objects, ud_obj, c_obj)
 	return c_obj
+end,
+})
+function obj_type_${object_name}_check(ud_obj)
+	return ${object_name}_objects[ud_obj]
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1172,16 +1184,13 @@ local obj_type_${object_name}_push
 
 (function()
 local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+local ${object_name}_objects = setmetatable({}, { __mode = "k",
+__index = function(objects, ud_obj)
+	return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
+end,
+})
 function obj_type_${object_name}_check(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	if c_obj == nil then
-		-- cdata object not in cache
-		c_obj = obj_udata_luacheck(ud_obj, ${object_name}_mt)
-		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
-		${object_name}_objects[ud_obj] = c_obj
-	end
-	return c_obj
+	return ${object_name}_objects[ud_obj]
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1205,16 +1214,13 @@ local obj_type_${object_name}_push
 
 (function()
 local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k" })
+local ${object_name}_objects = setmetatable({}, { __mode = "k",
+__index = function(objects, ud_obj)
+	return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
+end,
+})
 function obj_type_${object_name}_check(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	if c_obj == nil then
-		-- cdata object not in cache
-		c_obj = obj_udata_luacheck(ud_obj, ${object_name}_mt)
-		c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
-		${object_name}_objects[ud_obj] = c_obj
-	end
-	return c_obj
+	return ${object_name}_objects[ud_obj]
 end
 
 function obj_type_${object_name}_delete(ud_obj)
