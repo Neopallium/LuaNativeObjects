@@ -328,9 +328,6 @@ static FUNC_UNUSED void *obj_udata_luadelete(lua_State *L, int _index, obj_type 
 	/* null userdata. */
 	ud->obj = NULL;
 	ud->flags = 0;
-	/* clear the metatable to invalidate userdata. */
-	lua_pushnil(L);
-	lua_setmetatable(L, _index);
 	return obj;
 }
 
@@ -362,9 +359,6 @@ static FUNC_UNUSED void *obj_udata_luadelete_weak(lua_State *L, int _index, obj_
 	/* null userdata. */
 	ud->obj = NULL;
 	ud->flags = 0;
-	/* clear the metatable to invalidate userdata. */
-	lua_pushnil(L);
-	lua_setmetatable(L, _index);
 	/* get objects weak table. */
 	lua_pushlightuserdata(L, obj_udata_weak_ref_key);
 	lua_rawget(L, LUA_REGISTRYINDEX); /* weak ref table. */
