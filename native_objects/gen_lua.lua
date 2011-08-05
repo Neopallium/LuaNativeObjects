@@ -911,7 +911,18 @@ local OBJ_UDATA_LAST_FLAG		= OBJ_UDATA_FLAG_LOOKUP
 local OBJ_TYPE_FLAG_WEAK_REF	= 1
 local OBJ_TYPE_SIMPLE					= 2
 
-ffi.cdef[[
+local function ffi_safe_cdef(block_name, cdefs)
+	local fake_type = "struct sentinel_" .. block_name .. "_ty"
+	local stat, size = pcall(ffi.sizeof, fake_type)
+	if stat and size > 0 then
+		-- already loaded this cdef block
+		return
+	end
+	cdefs = fake_type .. "{ int a; int b; int c; };" .. cdefs
+	return ffi.cdef(cdefs)
+end
+
+ffi_safe_cdef("LuaNativeObjects", [[
 
 typedef struct obj_type obj_type;
 
@@ -936,7 +947,7 @@ typedef struct obj_udata {
 	uint32_t flags;  /**< lua_own:1bit */
 } obj_udata;
 
-]]
+]])
 
 -- cache mapping of cdata to userdata
 local weak_objects = setmetatable({}, { __mode = "v" })
