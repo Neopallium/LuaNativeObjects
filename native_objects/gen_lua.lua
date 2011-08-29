@@ -2047,6 +2047,7 @@ end,
 c_function = function(self, rec, parent)
 	rec.pushed_values = 0 -- track number of values pushed onto the stack.
 	rec:add_var('object_name', parent.name)
+	rec:add_var('function_name', rec.name)
 	if rec.is_destructor then
 		rec.__gc = true -- mark as '__gc' method
 	end
@@ -2112,7 +2113,7 @@ c_function_end = function(self, rec, parent)
 	if rec.no_ffi or #ffi_src == 0 then return end
 
 	-- end Lua code for FFI function
-	local ffi_parts = {"ffi_pre", "ffi_src", "ffi_post"}
+	local ffi_parts = {"ffi_temps", "ffi_pre", "ffi_src", "ffi_post"}
 	local ffi_return = rec:dump_parts("ffi_return")
 	-- trim last ', ' from list of return values.
 	ffi_return = ffi_return:gsub(", $","")
@@ -2247,8 +2248,18 @@ var_out = function(self, rec, parent)
 	-- add C variable to hold value to be pushed.
 	parent:write_part("pre",
 		{'  ', rec.c_type, ' ${', rec.name, '}', init, ';\n'})
-	parent:write_part("ffi_pre",
-		{'  local ${', rec.name, '}\n'})
+	local ffi_unwrap = ''
+	if rec.wrap == '&' then
+		local temp_name = "${function_name}_" .. rec.name .. "_tmp"
+		parent:write_part("ffi_temps",
+			{'  local ', temp_name, ' = ffi.new("',rec.c_type,'[1]")\n'})
+		parent:write_part("ffi_pre",
+			{'  local ${', rec.name, '} = ', temp_name,'\n'})
+		ffi_unwrap = '[0]'
+	else
+		parent:write_part("ffi_pre",
+			{'  local ${', rec.name, '}\n'})
+	end
 	-- if this is a temp. variable, then we are done.
 	if rec.is_temp then
 		return
@@ -2288,7 +2299,7 @@ var_out = function(self, rec, parent)
 		else
 			parent:write_part("post", { lua:_push(rec, flags) })
 			parent:write_part("ffi_post", {
-				'  ${', rec.name ,'} = ', lua:_ffi_push(rec, flags)
+				'  ${', rec.name ,'} = ', lua:_ffi_push(rec, flags), ffi_unwrap
 			})
 			parent:write_part("ffi_return", { "${", rec.name, "}, " })
 		end
@@ -2304,7 +2315,7 @@ var_out = function(self, rec, parent)
 		if err_type.ffi_is_error_check then
 			parent:write_part("ffi_post", {
 			'  if not ',err_type.ffi_is_error_check(error_code),' then\n',
-			'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags),
+			'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags), ffi_unwrap,
 			'  else\n',
 			'    ${', rec.name, '} = nil\n',
 			'  end\n',
@@ -2323,16 +2334,16 @@ var_out = function(self, rec, parent)
 		parent:write_part("ffi_post", {
 		'  local ${', rec.name,'}_err\n',
 		'  if ',lua.ffi_is_error_check(rec),' then\n',
-		'    ${', rec.name, '}_err = ', lua:_ffi_push_error(rec),
+		'    ${', rec.name, '}_err = ', lua:_ffi_push_error(rec), ffi_unwrap,
 		'  else\n',
-		'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags),
+		'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags), ffi_unwrap,
 		'  end\n',
 		})
 		parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
 	else
 		parent:write_part("post", { lua:_push(rec, flags) })
 		parent:write_part("ffi_post", {
-			'  ${', rec.name ,'} = ', lua:_ffi_push(rec, flags)
+			'  ${', rec.name ,'} = ', lua:_ffi_push(rec, flags), ffi_unwrap
 		})
 		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 	end

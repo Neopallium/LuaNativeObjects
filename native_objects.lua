@@ -1343,6 +1343,9 @@ local function process_module_file(file)
 			ffi_src[#ffi_src+1] = name
 			-- append parameter type & name to ffi cdef record
 			ffi_cdef[#ffi_cdef+1] = var.c_type .. ' '
+			if var.wrap == '&' then
+				ffi_cdef[#ffi_cdef+1] = '*'
+			end
 			ffi_cdef[#ffi_cdef+1] = name
 		end
 		src[#src+1] = ");"
