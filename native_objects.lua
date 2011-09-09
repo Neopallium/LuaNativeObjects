@@ -1105,6 +1105,7 @@ local function process_module_file(file)
 	--
 	-- do some pre-processing of records.
 	--
+	local ffi_cdefs = {}
 	process_records{
 	c_module = function(self, rec, parent)
 		rec.functions = {}
@@ -1342,19 +1343,46 @@ local function process_module_file(file)
 			-- append parameter to ffi source call
 			ffi_src[#ffi_src+1] = name
 			-- append parameter type & name to ffi cdef record
-			ffi_cdef[#ffi_cdef+1] = var.c_type .. ' '
+			ffi_cdef[#ffi_cdef+1] = var.c_type
 			if var.wrap == '&' then
 				ffi_cdef[#ffi_cdef+1] = '*'
 			end
-			ffi_cdef[#ffi_cdef+1] = name
 		end
 		src[#src+1] = ");"
 		ffi_cdef[#ffi_cdef+1] = ");\n"
 		ffi_src[#ffi_src+1] = ")"
 		-- replace `c_call` with `c_source` record
 		local idx = parent:replace_record(rec, c_source("src")(src))
+		-- convert to string.
+		ffi_cdef = tconcat(ffi_cdef)
+		-- check for ffi cdefs re-definitions
+		local cfunc = rec.cfunc
+		local cdef = ffi_cdefs[cfunc]
+		if cdef and cdef ~= ffi_cdef then
+			local old_name = cfunc
+			local i = 0
+			-- search for next "free" alias name.
+			repeat
+				i = i + 1
+				cfunc = old_name .. i
+				cdef = ffi_cdefs[cfunc]
+				-- search until "free" alias name, or same definition.
+			until not cdef or cdef == ffi_cdef
+			-- update ffi src with new alias name.
+			ffi_src = tconcat(ffi_src)
+			ffi_src = ffi_src:gsub(old_name .. '%(', cfunc .. '(')
+			-- create a cdef "asm" alias.
+			if not cdef then
+				ffi_cdef = ffi_cdef:gsub(old_name, cfunc)
+				ffi_cdef = ffi_cdef:gsub("%);\n$", [[) asm("]] .. old_name .. [[");]])
+			end
+		end
+		ffi_cdefs[cfunc] = ffi_cdef
 		-- insert FFI source record.
-		parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
+		if not cdef then
+			-- function not defined yet.
+			parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
+		end
 		parent:insert_record(ffi_source("ffi_src")(ffi_src), idx+1)
 	end,
 	ffi_export = function(self, rec, parent)
@@ -1389,8 +1417,7 @@ local function process_module_file(file)
 				if i > 1 then
 					ffi_cdef[#ffi_cdef+1] = ","
 				end
-				ffi_cdef[#ffi_cdef+1] = c_type .. " "
-				ffi_cdef[#ffi_cdef+1] = name
+				ffi_cdef[#ffi_cdef+1] = c_type
 			end
 			ffi_cdef[#ffi_cdef+1] = ");\n"
 		end
@@ -1404,10 +1431,19 @@ local function process_module_file(file)
 		ffi_src[#ffi_src+1] = '"])\n'
 		-- insert FFI source record.
 		local idx = parent:find_record(rec)
+		ffi_cdef = tconcat(ffi_cdef)
 		parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
 		parent:insert_record(ffi_source("ffi_import")(ffi_src), idx+1)
+		-- check for duplicate ffi cdefs.
+		local cdef = ffi_cdefs[rec.name]
+		if cdef and cdef ~= ffi_cdef then
+			error("Re-definition of FFI cdef: " .. cdef)
+		end
+		ffi_cdefs[rec.name] = ffi_cdef
 	end,
 	}
+	-- clear ffi cdefs
+	ffi_cdefs = nil
 
 	--
 	-- sort var_in/var_out records.
