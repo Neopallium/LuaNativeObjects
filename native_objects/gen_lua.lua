@@ -680,11 +680,10 @@ static FUNC_UNUSED int lua_checktype_ref(lua_State *L, int _index, int _type) {
 #if LUAJIT_FFI
 static int nobj_udata_new_ffi(lua_State *L) {
 	size_t size = luaL_checkinteger(L, 1);
-	void *ud;
 	luaL_checktype(L, 2, LUA_TTABLE);
 	lua_settop(L, 2);
 	/* create userdata. */
-	ud = lua_newuserdata(L, size);
+	lua_newuserdata(L, size);
 	lua_replace(L, 1);
 	/* set userdata's metatable. */
 	lua_setmetatable(L, 1);
