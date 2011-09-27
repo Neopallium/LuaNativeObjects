@@ -1099,7 +1099,7 @@ local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
-(function()
+do
 local ${object_name}_mt = _priv.${object_name}
 local ${object_name}_objects = setmetatable({}, { __mode = "k",
 __index = function(objects, ud_obj)
@@ -1121,7 +1121,7 @@ function obj_type_${object_name}_push(c_obj)
 	${object_name}_objects[ud_obj] = cdata
 	return ud_obj
 end
-end)()
+end
 
 ]],
 ['embed'] = [[
@@ -1129,7 +1129,7 @@ local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
-(function()
+do
 local ${object_name}_mt = _priv.${object_name}
 local ${object_name}_objects = setmetatable({}, { __mode = "k",
 __index = function(objects, ud_obj)
@@ -1151,7 +1151,7 @@ function obj_type_${object_name}_push(c_obj)
 	${object_name}_objects[ud_obj] = cdata
 	return ud_obj
 end
-end)()
+end
 
 ]],
 ['cast pointer'] = [[
@@ -1159,7 +1159,7 @@ local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
-(function()
+do
 local ${object_name}_mt = _priv.${object_name}
 local ${object_name}_objects = setmetatable({}, { __mode = "k",
 __index = function(objects, ud_obj)
@@ -1191,7 +1191,7 @@ function obj_type_${object_name}_push(c_obj, flags)
 	${object_name}_objects[ud_obj] = c_obj
 	return ud_obj
 end
-end)()
+end
 
 ]],
 ['generic'] = [[
@@ -1199,7 +1199,7 @@ local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
-(function()
+do
 local ${object_name}_mt = _priv.${object_name}
 local ${object_name}_objects = setmetatable({}, { __mode = "k",
 __index = function(objects, ud_obj)
@@ -1221,7 +1221,7 @@ function obj_type_${object_name}_push(c_obj, flags)
 	${object_name}_objects[ud_obj] = c_obj
 	return ud_obj
 end
-end)()
+end
 
 ]],
 ['generic_weak'] = [[
@@ -1229,7 +1229,7 @@ local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
-(function()
+do
 local ${object_name}_mt = _priv.${object_name}
 local ${object_name}_objects = setmetatable({}, { __mode = "k",
 __index = function(objects, ud_obj)
@@ -1251,7 +1251,7 @@ function obj_type_${object_name}_push(c_obj, flags)
 	${object_name}_objects[ud_obj] = c_obj
 	return ud_obj
 end
-end)()
+end
 
 ]],
 }
