@@ -190,6 +190,9 @@ process_records{
 		rec._check = function(self, var)
 			return ' ${'..var.name..'} = '..type_name..'_check(L,${'..var.name..'::idx});\n'
 		end
+		rec._opt = function(self, var)
+			return ' ${'..var.name..'} = '..type_name..'_optional(L,${'..var.name..'::idx});\n'
+		end
 		rec._delete = function(self, var, flags)
 			assert(flags, 'need flags variable')
 			return ' ${'..var.name..'} = '..type_name..'_delete(L,${'..var.name..'::idx},'..flags..');\n'
@@ -205,6 +208,13 @@ process_records{
 			end
 			local name = '${' .. var.name .. '}'
 			return '' .. name .. ' = '..type_name..'_check('..name..')\n'
+		end
+		rec._ffi_opt = function(self, var)
+			if var.is_this then
+				return 'local ${' .. var.name .. '} = '..type_name..'_check(self)\n'
+			end
+			local name = '${' .. var.name .. '}'
+			return '' .. name .. ' = '..type_name..'_optional('..name..')\n'
 		end
 		rec._ffi_delete = function(self, var)
 			return 'local ${'..var.name..'},${'..var.name..'_flags} = '..type_name..'_delete(self)\n'

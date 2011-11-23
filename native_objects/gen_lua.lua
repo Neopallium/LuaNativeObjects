@@ -334,6 +334,15 @@ static FUNC_UNUSED void *obj_udata_luacheck(lua_State *L, int _index, obj_type *
 	return obj;
 }
 
+static FUNC_UNUSED void *obj_udata_luaoptional(lua_State *L, int _index, obj_type *type) {
+	void *obj = NULL;
+	if(lua_isnil(L, _index)) {
+		return obj;
+	}
+	obj_udata_luacheck_internal(L, _index, &(obj), type, 1);
+	return obj;
+}
+
 static FUNC_UNUSED void *obj_udata_luadelete(lua_State *L, int _index, obj_type *type, int *flags) {
 	void *obj;
 	obj_udata *ud = obj_udata_luacheck_internal(L, _index, &(obj), type, 0);
@@ -483,6 +492,13 @@ static FUNC_UNUSED void * obj_simple_udata_luacheck(lua_State *L, int _index, ob
 	}
 	luaL_typerror(L, _index, type->name); /* is not a userdata value. */
 	return NULL;
+}
+
+static FUNC_UNUSED void * obj_simple_udata_luaoptional(lua_State *L, int _index, obj_type *type) {
+	if(lua_isnil(L, _index)) {
+		return NULL;
+	}
+	return obj_simple_udata_luacheck(L, _index, type);
 }
 
 static FUNC_UNUSED void * obj_simple_udata_luadelete(lua_State *L, int _index, obj_type *type, int *flags) {
@@ -762,6 +778,8 @@ local obj_type_check_delete_push = {
 ['simple'] = [[
 #define obj_type_${object_name}_check(L, _index) \
 	*((${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name})))
+#define obj_type_${object_name}_optional(L, _index) \
+	*((${object_name} *)obj_simple_udata_luaoptional(L, _index, &(obj_type_${object_name})))
 #define obj_type_${object_name}_delete(L, _index, flags) \
 	*((${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags))
 #define obj_type_${object_name}_push(L, obj, flags) \
@@ -770,6 +788,8 @@ local obj_type_check_delete_push = {
 ['embed'] = [[
 #define obj_type_${object_name}_check(L, _index) \
 	(${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name}))
+#define obj_type_${object_name}_optional(L, _index) \
+	(${object_name} *)obj_simple_udata_luaoptional(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
 	(${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
@@ -778,6 +798,8 @@ local obj_type_check_delete_push = {
 ['cast pointer'] = [[
 #define obj_type_${object_name}_check(L, _index) \
 	(${object_name})(uintptr_t)obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
+#define obj_type_${object_name}_optional(L, _index) \
+	(${object_name})(uintptr_t)obj_udata_luaoptional(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
 	(${object_name})(uintptr_t)obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
@@ -786,6 +808,8 @@ local obj_type_check_delete_push = {
 ['generic'] = [[
 #define obj_type_${object_name}_check(L, _index) \
 	obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
+#define obj_type_${object_name}_optional(L, _index) \
+	obj_udata_luaoptional(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
 	obj_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
@@ -794,6 +818,8 @@ local obj_type_check_delete_push = {
 ['generic_weak'] = [[
 #define obj_type_${object_name}_check(L, _index) \
 	obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
+#define obj_type_${object_name}_optional(L, _index) \
+	obj_udata_luaoptional(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_delete(L, _index, flags) \
 	obj_udata_luadelete_weak(L, _index, &(obj_type_${object_name}), flags)
 #define obj_type_${object_name}_push(L, obj, flags) \
@@ -1130,6 +1156,7 @@ end
 local ffi_obj_type_check_delete_push = {
 ['simple'] = [[
 local obj_type_${object_name}_check
+local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1142,6 +1169,12 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
+end
+function obj_type_${object_name}_optional(ud_obj)
+	if ud_obj then
+		return ${object_name}_objects[ud_obj]
+	end
+	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1160,6 +1193,7 @@ end
 ]],
 ['embed'] = [[
 local obj_type_${object_name}_check
+local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1172,6 +1206,12 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
+end
+function obj_type_${object_name}_optional(ud_obj)
+	if ud_obj then
+		return ${object_name}_objects[ud_obj]
+	end
+	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1190,6 +1230,7 @@ end
 ]],
 ['cast pointer'] = [[
 local obj_type_${object_name}_check
+local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1206,6 +1247,12 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
+end
+function obj_type_${object_name}_optional(ud_obj)
+	if ud_obj then
+		return ${object_name}_objects[ud_obj]
+	end
+	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1230,6 +1277,7 @@ end
 ]],
 ['generic'] = [[
 local obj_type_${object_name}_check
+local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1242,6 +1290,12 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
+end
+function obj_type_${object_name}_optional(ud_obj)
+	if ud_obj then
+		return ${object_name}_objects[ud_obj]
+	end
+	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1260,6 +1314,7 @@ end
 ]],
 ['generic_weak'] = [[
 local obj_type_${object_name}_check
+local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1272,6 +1327,12 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
+end
+function obj_type_${object_name}_optional(ud_obj)
+	if ud_obj then
+		return ${object_name}_objects[ud_obj]
+	end
+	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
