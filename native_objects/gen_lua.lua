@@ -184,9 +184,15 @@ typedef struct obj_field {
 	uint32_t        flags;  /**< is_writable:1bit */
 } obj_field;
 
+typedef enum {
+	REG_OBJECT,
+	REG_PACKAGE,
+	REG_META,
+} module_reg_type;
+
 typedef struct reg_sub_module {
 	obj_type        *type;
-	int             is_package;
+	module_reg_type req_type;
 	const luaL_reg  *pub_funcs;
 	const luaL_reg  *methods;
 	const luaL_reg  *metas;
@@ -582,13 +588,41 @@ static void obj_type_register_package(lua_State *L, const reg_sub_module *type_r
 	lua_pop(L, 1);  /* drop package table */
 }
 
+static void obj_type_register_meta(lua_State *L, const reg_sub_module *type_reg) {
+	const luaL_reg *reg_list;
+
+	/* create public functions table. */
+	reg_list = type_reg->pub_funcs;
+	if(reg_list != NULL && reg_list[0].name != NULL) {
+		/* register functions */
+		luaL_register(L, NULL, reg_list);
+	}
+
+	obj_type_register_constants(L, type_reg->constants, -1);
+
+	/* register methods. */
+	luaL_register(L, NULL, type_reg->methods);
+
+	/* create metatable table. */
+	lua_newtable(L);
+	luaL_register(L, NULL, type_reg->metas); /* fill metatable */
+	/* setmetatable on meta-object. */
+	lua_setmetatable(L, -2);
+
+	lua_pop(L, 1);  /* drop meta-object */
+}
+
 static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int priv_table) {
 	const luaL_reg *reg_list;
 	obj_type *type = type_reg->type;
 	const obj_base *base = type_reg->bases;
 
-	if(type_reg->is_package == 1) {
+	if(type_reg->req_type == REG_PACKAGE) {
 		obj_type_register_package(L, type_reg);
+		return;
+	}
+	if(type_reg->req_type == REG_META) {
+		obj_type_register_meta(L, type_reg);
 		return;
 	}
 
@@ -1294,6 +1328,8 @@ __lt = '__lt',
 __le = '__le',
 __gc = '__gc',
 __tostring = '__tostring',
+__index = '__index',
+__newindex = '__newindex',
 }
 
 local function add_constant(rec, constant)
@@ -1592,6 +1628,13 @@ object = function(self, rec, parent)
 		rec.methods_regs = 'methods_regs'
 		rec:write_part(rec.methods_regs,
 			{'static const luaL_reg obj_${object_name}_methods[] = {\n'})
+	elseif rec.is_meta then
+		rec:write_part("metas_regs",
+			{'static const luaL_reg obj_${object_name}_metas[] = {\n'})
+		-- where we want the module function registered.
+		rec.methods_regs = 'methods_regs'
+		rec:write_part(rec.methods_regs,
+			{'static const luaL_reg obj_${object_name}_methods[] = {\n'})
 	end
 	rec:write_part("const_regs",
 		{'static const obj_const obj_${object_name}_constants[] = {\n'})
@@ -1700,6 +1743,16 @@ object_end = function(self, rec, parent)
 		'  {NULL, 0, 0, 0}\n',
 		'};\n\n'
 		})
+	elseif rec.is_meta then
+		-- finish luaL_reg arrays for this object
+		rec:write_part("methods_regs", {
+		'  {NULL, NULL}\n',
+		'};\n\n'
+		})
+		rec:write_part("metas_regs", {
+		'  {NULL, NULL}\n',
+		'};\n\n'
+		})
 	end
 	-- add constants
 	for _,const in pairs(rec.constants) do
@@ -1719,15 +1772,20 @@ object_end = function(self, rec, parent)
 		type_info_ptr = 'NULL'
 	end
 	local object_reg_info
-	if rec.is_package then
+	if rec.is_meta then
 		object_reg_info = {
-		'  { ', type_info_ptr, ', 1, obj_${object_name}_pub_funcs, NULL, ',
+		'  { ', type_info_ptr, ', REG_META, obj_${object_name}_pub_funcs, obj_${object_name}_methods, ',
+			'obj_${object_name}_metas, NULL, NULL, obj_${object_name}_constants}'
+		}
+	elseif rec.is_package then
+		object_reg_info = {
+		'  { ', type_info_ptr, ', REG_PACKAGE, obj_${object_name}_pub_funcs, NULL, ',
 			'NULL, NULL, NULL, obj_${object_name}_constants}'
 		}
 	else
 		object_reg_info = {
-		'  { ', type_info_ptr, ', 0, obj_${object_name}_pub_funcs, obj_${object_name}_methods, ',
-			'obj_${object_name}_metas, obj_${object_name}_bases, ',
+		'  { ', type_info_ptr, ', REG_OBJECT, obj_${object_name}_pub_funcs, ',
+			'obj_${object_name}_methods, obj_${object_name}_metas, obj_${object_name}_bases, ',
 			'obj_${object_name}_fields, obj_${object_name}_constants}'
 		}
 	end

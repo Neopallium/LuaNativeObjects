@@ -231,6 +231,15 @@ function package(name)
 end
 end
 
+function meta_object(name)
+	return function (rec)
+	rec = object(name)(rec)
+	rec.is_package = true
+	rec.is_meta = true
+	return rec
+end
+end
+
 function extends(name)
 	return function (rec)
 	rec = make_record(rec, "extends")
@@ -382,6 +391,8 @@ __lt = true,
 __le = true,
 __gc = true,
 __tostring = true,
+__index = true,
+__newindex = true,
 }
 function method(name)
 	return function (rec)
@@ -963,7 +974,9 @@ local function process_module_file(file)
 	c_function = function(self, rec, parent)
 		if rec._is_method then
 			local var
-			if rec.is_constructor then
+			if parent.is_meta then
+				var = var_in{ "<any>", "this", is_this = true }
+			elseif rec.is_constructor then
 				var = var_out{ parent.c_type, "this", is_this = true }
 			else
 				var = var_in{ parent.c_type, "this", is_this = true }
@@ -1144,7 +1157,7 @@ local function process_module_file(file)
 	c_function = function(self, rec, parent)
 		local c_name = parent.name .. '__' .. rec.name
 		if rec._is_method then
-			assert(not parent.is_package,
+			assert(not parent.is_package or parent.is_meta,
 				"Package's can't have methods: package=" .. parent.name .. ", method=" .. rec.name)
 			c_name = c_name .. '__meth'
 		else
