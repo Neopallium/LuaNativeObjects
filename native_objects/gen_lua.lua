@@ -1125,6 +1125,14 @@ end
 
 local function obj_simple_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
 	-- convert userdata to cdata.
+	local c_obj = ffi.cast(c_type, obj_simple_udata_luacheck(ud_obj, ud_mt))[0]
+	-- cache converted cdata
+	rawset(objects, ud_obj, c_obj)
+	return c_obj
+end
+
+local function obj_embed_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
+	-- convert userdata to cdata.
 	local c_obj = ffi.cast(c_type, obj_simple_udata_luacheck(ud_obj, ud_mt))
 	-- cache converted cdata
 	rawset(objects, ud_obj, c_obj)
@@ -1132,10 +1140,9 @@ local function obj_simple_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
 end
 
 local function obj_simple_udata_luadelete(ud_obj, type_mt)
-	local c_obj = obj_simple_udata_luacheck(ud_obj, type_mt)
 	-- invalid userdata, by setting the metatable to nil.
 	d_setmetatable(ud_obj, nil)
-	return c_obj, OBJ_UDATA_FLAG_OWN
+	return OBJ_UDATA_FLAG_OWN
 end
 
 local function obj_simple_udata_luapush(c_obj, size, type_mt)
@@ -1178,14 +1185,16 @@ function obj_type_${object_name}_optional(ud_obj)
 end
 
 function obj_type_${object_name}_delete(ud_obj)
+	local c_obj = ${object_name}_objects[ud_obj]
 	${object_name}_objects[ud_obj] = nil
-	return obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
+	return c_obj, obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
 end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 function obj_type_${object_name}_push(c_obj)
-	local ud_obj, cdata = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
-	${object_name}_objects[ud_obj] = cdata
+	local tmp_obj = ffi.new("${object_name}[1]", c_obj)
+	local ud_obj, cdata = obj_simple_udata_luapush(tmp_obj, ${object_name}_sizeof, ${object_name}_mt)
+	${object_name}_objects[ud_obj] = ffi.new("${object_name} *", cdata)[0]
 	return ud_obj
 end
 end
@@ -1201,7 +1210,7 @@ do
 local ${object_name}_mt = _priv.${object_name}
 local ${object_name}_objects = setmetatable({}, { __mode = "k",
 __index = function(objects, ud_obj)
-	return obj_simple_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
+	return obj_embed_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
 end,
 })
 function obj_type_${object_name}_check(ud_obj)
@@ -1215,8 +1224,9 @@ function obj_type_${object_name}_optional(ud_obj)
 end
 
 function obj_type_${object_name}_delete(ud_obj)
+	local c_obj = ${object_name}_objects[ud_obj]
 	${object_name}_objects[ud_obj] = nil
-	return obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
+	return c_obj, obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
 end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
