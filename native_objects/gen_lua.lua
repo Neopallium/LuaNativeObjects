@@ -1900,7 +1900,11 @@ include = function(self, rec, parent)
 end,
 define = function(self, rec, parent)
 	-- append to defines parts
-	self._cur_module:write_part("defines", { '#define ', rec.name, ' ', rec.value, '\n' })
+	if rec.value then
+		self._cur_module:write_part("defines", { '#define ', rec.name, ' ', rec.value, '\n' })
+	else
+		self._cur_module:write_part("defines", { '#define ', rec.name, '\n' })
+	end
 end,
 extends = function(self, rec, parent)
 	assert(not parent.is_package, "A Package can't extend anything: package=" .. parent.name)
@@ -2446,8 +2450,8 @@ src_write[[
 for name,mod in pairs(parsed._modules_out) do
 	src_write(
 		mod:dump_parts({
-			"includes",
 			"defines",
+			"includes",
 			"typedefs",
 			"funcdefs",
 			"obj_types",
