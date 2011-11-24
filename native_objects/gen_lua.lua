@@ -587,10 +587,21 @@ static void obj_type_register_constants(lua_State *L, const obj_const *constants
 			lua_pushnil(L);
 			break;
 		}
+		/* map values back to keys. */
 		if(bidirectional) {
+			/* check if value already exists. */
 			lua_pushvalue(L, -1);
-			lua_pushvalue(L, -3);
-			lua_rawset(L, tab_idx - 4);
+			lua_rawget(L, tab_idx - 3);
+			if(lua_isnil(L, -1)) {
+				lua_pop(L, 1);
+				/* add value->key mapping. */
+				lua_pushvalue(L, -1);
+				lua_pushvalue(L, -3);
+				lua_rawset(L, tab_idx - 4);
+			} else {
+				/* value already exists. */
+				lua_pop(L, 1);
+			}
 		}
 		lua_rawset(L, tab_idx - 2);
 		constants++;
