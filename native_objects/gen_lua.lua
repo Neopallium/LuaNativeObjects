@@ -2407,8 +2407,8 @@ var_out = function(self, rec, parent)
 				'  -- check for error.\n',
 				'  local ${', rec.name,'}_err\n',
 				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
-				'    ${', rec.name, '}_err = ', lua:_ffi_push(rec, flags),
 				'    ${', rec.name ,'} = nil\n',
+				'    ${', rec.name, '}_err = ', lua:_ffi_push(rec, flags),
 				'  else\n',
 				'    ${', rec.name ,'} = true\n',
 				'  end\n',
@@ -2424,6 +2424,7 @@ var_out = function(self, rec, parent)
 		end
 	elseif rec.no_nil_on_error ~= true and error_code then
 		local err_type = error_code.c_type_rec
+		-- return nil for this out variable, if there was an error.
 		parent:write_part("post", {
 		'  if(!',err_type.is_error_check(error_code),') {\n',
 		'  ', lua:_push(rec, flags),
@@ -2442,6 +2443,7 @@ var_out = function(self, rec, parent)
 		end
 		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 	elseif rec.is_error_on_null then
+		-- if a function return NULL, then there was an error.
 		parent:write_part("post", {
 		'  if(',lua.is_error_check(rec),') {\n',
 		'    lua_pushnil(L);\n',
