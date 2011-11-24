@@ -199,6 +199,7 @@ typedef struct reg_sub_module {
 	const obj_base  *bases;
 	const obj_field *fields;
 	const obj_const *constants;
+	bool            bidirectional_consts;
 } reg_sub_module;
 
 #define OBJ_UDATA_FLAG_OWN (1<<0)
@@ -567,7 +568,8 @@ static int obj_constructor_call_wrapper(lua_State *L) {
 	return lua_gettop(L);
 }
 
-static void obj_type_register_constants(lua_State *L, const obj_const *constants, int tab_idx) {
+static void obj_type_register_constants(lua_State *L, const obj_const *constants, int tab_idx,
+		bool bidirectional) {
 	/* register constants. */
 	while(constants->name != NULL) {
 		lua_pushstring(L, constants->name);
@@ -585,6 +587,11 @@ static void obj_type_register_constants(lua_State *L, const obj_const *constants
 			lua_pushnil(L);
 			break;
 		}
+		if(bidirectional) {
+			lua_pushvalue(L, -1);
+			lua_pushvalue(L, -3);
+			lua_rawset(L, tab_idx - 4);
+		}
 		lua_rawset(L, tab_idx - 2);
 		constants++;
 	}
@@ -599,7 +606,7 @@ static void obj_type_register_package(lua_State *L, const reg_sub_module *type_r
 		luaL_register(L, NULL, reg_list);
 	}
 
-	obj_type_register_constants(L, type_reg->constants, -1);
+	obj_type_register_constants(L, type_reg->constants, -1, type_reg->bidirectional_consts);
 
 	lua_pop(L, 1);  /* drop package table */
 }
@@ -614,7 +621,7 @@ static void obj_type_register_meta(lua_State *L, const reg_sub_module *type_reg)
 		luaL_register(L, NULL, reg_list);
 	}
 
-	obj_type_register_constants(L, type_reg->constants, -1);
+	obj_type_register_constants(L, type_reg->constants, -1, type_reg->bidirectional_consts);
 
 	/* register methods. */
 	luaL_register(L, NULL, type_reg->methods);
@@ -707,7 +714,7 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 		base++;
 	}
 
-	obj_type_register_constants(L, type_reg->constants, -2);
+	obj_type_register_constants(L, type_reg->constants, -2, type_reg->bidirectional_consts);
 
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -3);               /* dup methods table */
@@ -877,7 +884,7 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 	luaL_register(L, "${module_name}", ${module_c_name}_function);
 
 	/* register module constants. */
-	obj_type_register_constants(L, ${module_c_name}_constants, -1);
+	obj_type_register_constants(L, ${module_c_name}_constants, -1, false);
 
 	for(; submodules->func != NULL ; submodules++) {
 		lua_pushcfunction(L, submodules->func);
@@ -1542,7 +1549,7 @@ c_module_end = function(self, rec, parent)
 	})
 	-- end module/object register array.
 	rec:write_part("reg_sub_modules", {
-	'  {NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL}\n',
+	'  {NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, false}\n',
 	'};\n\n'
 	})
 	-- end submodule_libs array
@@ -1819,21 +1826,25 @@ object_end = function(self, rec, parent)
 		type_info_ptr = 'NULL'
 	end
 	local object_reg_info
+	local bidirectional = 'false'
+	if rec.map_constants_bidirectional then
+		bidirectional = 'true'
+	end
 	if rec.is_meta then
 		object_reg_info = {
 		'  { ', type_info_ptr, ', REG_META, obj_${object_name}_pub_funcs, obj_${object_name}_methods, ',
-			'obj_${object_name}_metas, NULL, NULL, obj_${object_name}_constants}'
+			'obj_${object_name}_metas, NULL, NULL, obj_${object_name}_constants, ',bidirectional,'}'
 		}
 	elseif rec.is_package then
 		object_reg_info = {
 		'  { ', type_info_ptr, ', REG_PACKAGE, obj_${object_name}_pub_funcs, NULL, ',
-			'NULL, NULL, NULL, obj_${object_name}_constants}'
+			'NULL, NULL, NULL, obj_${object_name}_constants, ',bidirectional,'}'
 		}
 	else
 		object_reg_info = {
 		'  { ', type_info_ptr, ', REG_OBJECT, obj_${object_name}_pub_funcs, ',
 			'obj_${object_name}_methods, obj_${object_name}_metas, obj_${object_name}_bases, ',
-			'obj_${object_name}_fields, obj_${object_name}_constants}'
+			'obj_${object_name}_fields, obj_${object_name}_constants, ',bidirectional,'}'
 		}
 	end
 	-- end object's FFI source

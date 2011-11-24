@@ -331,6 +331,15 @@ function constants(values)
 end
 
 function export_definitions(values)
+	if type(values) == 'string' then
+		local name = values
+		return function(values)
+			return package(name)({
+				map_constants_bidirectional = true,
+				export_definitions(values)
+			})
+		end
+	end
 	rec = make_record({}, "export_definitions")
 	rec.values = values
 	return rec
