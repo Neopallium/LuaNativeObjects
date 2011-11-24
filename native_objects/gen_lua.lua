@@ -1607,13 +1607,17 @@ c_module_end = function(self, rec, parent)
 	self._cur_module = nil
 end,
 error_code = function(self, rec, parent)
+	rec:add_var('object_name', rec.name)
 	local func_def = 'static void ' .. rec.func_name ..
-		'(lua_State *L, ' .. rec.name .. ' err)'
+		'(lua_State *L, ${object_name} err)'
 	-- add push error function decl.
-	parent:write_part('funcdefs', {
-		'typedef ', rec.c_type, ' ', rec.name, ';\n\n',
+	rec:write_part('funcdefs', {
+		'typedef ', rec.c_type, ' ${object_name};\n\n',
 		func_def, ';\n'
-		})
+	})
+	rec:write_part("ffi_typedef", {
+		'typedef ', rec.c_type, ' ', rec.name, ';\n\n',
+	})
 	-- start push error function.
 	rec:write_part('src', {func_def, ' {\n'})
 	-- add C variable for error string to be pushed.
@@ -1640,15 +1644,20 @@ error_code_end = function(self, rec, parent)
 end
 
 ]])
-	-- append custom dyn caster code
+	-- append custom error push function.
+	local parts = { "funcdefs", "src" }
+	rec:vars_parts(parts)
+	parent:copy_parts(rec, { "funcdefs" })
+	-- append custom error push function.
 	parent:write_part("methods", rec:dump_parts{ "src" })
 
 	-- don't generate FFI bindings
 	if self._cur_module.ffi_manual_bindings then return end
 
-	parent:write_part("ffi_src", rec:dump_parts{ "ffi_src" })
-	parent:write_part("ffi_typedef", rec:dump_parts{ "ffi_typedef" })
-	parent:write_part("ffi_cdef", rec:dump_parts{ "ffi_cdef" })
+	-- copy generated FFI bindings to parent
+	local ffi_parts = { "ffi_typedef", "ffi_cdef", "ffi_src" }
+	rec:vars_parts(ffi_parts)
+	parent:copy_parts(rec, ffi_parts)
 end,
 object = function(self, rec, parent)
 	rec:add_var('object_name', rec.name)
@@ -1702,10 +1711,12 @@ object = function(self, rec, parent)
 		})
 	end
 	-- FFI typedef
-	local ffi_type = rec.ffi_type or 'struct ${object_name}'
-	rec:write_part("ffi_typedef", {
-		'typedef ', ffi_type, ' ${object_name};\n',
-	})
+	if not rec.is_package then
+		local ffi_type = rec.ffi_type or 'struct ${object_name}'
+		rec:write_part("ffi_typedef", {
+			'typedef ', ffi_type, ' ${object_name};\n',
+		})
+	end
 end,
 object_end = function(self, rec, parent)
 	-- check for dyn_caster
