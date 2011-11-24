@@ -214,7 +214,7 @@ process_records{
 				return 'local ${' .. var.name .. '} = '..type_name..'_check(self)\n'
 			end
 			local name = '${' .. var.name .. '}'
-			return '' .. name .. ' = '..type_name..'_optional('..name..')\n'
+			return '' .. name .. ' = '..name..' and '..type_name..'_check('..name..') or nil\n'
 		end
 		rec._ffi_delete = function(self, var)
 			return 'local ${'..var.name..'},${'..var.name..'_flags} = '..type_name..'_delete(self)\n'

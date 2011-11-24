@@ -1163,7 +1163,6 @@ end
 local ffi_obj_type_check_delete_push = {
 ['simple'] = [[
 local obj_type_${object_name}_check
-local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1176,12 +1175,6 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
-end
-function obj_type_${object_name}_optional(ud_obj)
-	if ud_obj then
-		return ${object_name}_objects[ud_obj]
-	end
-	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1202,7 +1195,6 @@ end
 ]],
 ['embed'] = [[
 local obj_type_${object_name}_check
-local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1215,12 +1207,6 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
-end
-function obj_type_${object_name}_optional(ud_obj)
-	if ud_obj then
-		return ${object_name}_objects[ud_obj]
-	end
-	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1240,7 +1226,6 @@ end
 ]],
 ['cast pointer'] = [[
 local obj_type_${object_name}_check
-local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1257,12 +1242,6 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
-end
-function obj_type_${object_name}_optional(ud_obj)
-	if ud_obj then
-		return ${object_name}_objects[ud_obj]
-	end
-	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1287,7 +1266,6 @@ end
 ]],
 ['generic'] = [[
 local obj_type_${object_name}_check
-local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1300,12 +1278,6 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
-end
-function obj_type_${object_name}_optional(ud_obj)
-	if ud_obj then
-		return ${object_name}_objects[ud_obj]
-	end
-	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
@@ -1324,7 +1296,6 @@ end
 ]],
 ['generic_weak'] = [[
 local obj_type_${object_name}_check
-local obj_type_${object_name}_optional
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -1337,12 +1308,6 @@ end,
 })
 function obj_type_${object_name}_check(ud_obj)
 	return ${object_name}_objects[ud_obj]
-end
-function obj_type_${object_name}_optional(ud_obj)
-	if ud_obj then
-		return ${object_name}_objects[ud_obj]
-	end
-	return ud_obj
 end
 
 function obj_type_${object_name}_delete(ud_obj)
