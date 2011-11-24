@@ -915,6 +915,8 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 		obj_type_register(L, reg, priv_table);
 	}
 
+${module_init_src}
+
 #if LUAJIT_FFI
 	nobj_try_loading_ffi(L, "${module_c_name}", ${module_c_name}_ffi_lua_code,
 		${module_c_name}_ffi_export, priv_table);
@@ -948,6 +950,8 @@ LUA_NOBJ_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	lua_pushvalue(L, -1);            /* dup value. */
 	lua_setglobal(L, reg->type->name);    /* global: <object_name> = <object public API> */
 #endif
+
+${module_init_src}
 
 #if ${module_c_name}_${object_name}_LUAJIT_FFI
 	nobj_try_loading_ffi(L, "${module_c_name}_${object_name}",
@@ -1598,6 +1602,7 @@ c_module_end = function(self, rec, parent)
 	})
 
 	-- add main luaopen function.
+	rec:add_var("module_init_src", rec:dump_parts{ "module_init_src"})
 	rec:write_part("luaopen", luaopen_main)
 	rec:write_part("helper_funcs", objHelperFunc)
 	-- encode luajit ffi code
@@ -1889,6 +1894,7 @@ object_end = function(self, rec, parent)
 			rec:write_part("luaopen_defs", rec:dump_parts{ "ffi_export" })
 		end
 		-- add submodule luaopen function.
+		rec:add_var("module_init_src", rec:dump_parts{ "module_init_src"})
 		rec:write_part("luaopen", luaopen_submodule)
 		rec:write_part("luaopen_defs",
 			"int luaopen_${module_c_name}_${object_name}(lua_State *L);\n")
