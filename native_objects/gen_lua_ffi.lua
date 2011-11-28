@@ -994,16 +994,15 @@ var_out = function(self, rec, parent)
 	if rec.is_length_ref then
 		return
 	end
-	local flags
-	if rec.has_obj_flags and (rec.is_this or rec.own) then
+	local flags = false
+	local lua = rec.c_type_rec
+	if lua.has_obj_flags and (rec.is_this or rec.own) then
 		-- add flags ${var_name_flags} variable
 		parent:add_rec_var(rec, rec.name .. '_flags')
+		flags = '${' .. rec.name .. '_flags}'
 		parent:write_part("ffi_pre",{
-			'  local ${',rec.name,'_flags} = OBJ_UDATA_FLAG_OWN\n'
+			'  local ',flags,' = OBJ_UDATA_FLAG_OWN\n'
 		})
-	end
-	if not rec.has_obj_flags then
-		flags = false
 	end
 	-- register variable for code gen (i.e. so ${var_name} is replaced with true variable name).
 	parent:add_rec_var(rec)
