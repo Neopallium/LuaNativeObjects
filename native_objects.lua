@@ -588,18 +588,6 @@ function var_ref(var)
 	return rec
 end
 
-local function return_type_to_var(r_type)
-	local var
-	-- convert return c_type to var_out
-	r_type = r_type or "void"
-	if type(r_type) == 'string' then
-		var = var_out{ r_type, "rc_" .. cfunc }
-	else
-		var = var_out(r_type)
-	end
-	return var
-end
-
 function c_call(return_type)
 	return function (cfunc)
 	return function (params)
@@ -620,7 +608,7 @@ function c_macro_call(ret)
 	return function (cfunc)
 	return function (params)
 	local rec = c_call(ret)(cfunc)(params)
-	rec.ffi_need_wrapper = true
+	rec.ffi_need_wrapper = "c_wrap"
 	rec.is_macro_call = true
 	return rec
 end
@@ -631,8 +619,19 @@ function c_inline_call(ret)
 	return function (cfunc)
 	return function (params)
 	local rec = c_call(ret)(cfunc)(params)
-	rec.ffi_need_wrapper = true
+	rec.ffi_need_wrapper = "c_wrap"
 	rec.is_inline_call = true
+	return rec
+end
+end
+end
+
+function c_export_call(ret)
+	return function (cfunc)
+	return function (params)
+	local rec = c_call(ret)(cfunc)(params)
+	rec.ffi_need_wrapper = "c_export"
+	rec.is_export_call = true
 	return rec
 end
 end
@@ -1074,7 +1073,7 @@ local function process_module_file(file)
 		end
 		-- find parent 'object' record.
 		local object = parent
-		while object._rec_type ~= 'object' do
+		while object._rec_type ~= 'object' and object._rec_type ~= 'c_module' do
 			object = object._parent
 			assert(object, "Can't find parent 'object' record of 'c_call'")
 		end
@@ -1083,7 +1082,7 @@ local function process_module_file(file)
 		-- convert return type into "var_out" if it's not a "void" type.
 		if ret ~= "void" then
 			if type(ret) ~= 'string' then
-				ret_type = ret.c_type
+				ret_type = ret[1]
 			end
 			ret = "  return "
 		else
@@ -1118,14 +1117,18 @@ local function process_module_file(file)
 		params = tconcat(params)
 		call = tconcat(call)
 		-- create wrapper function
-		local wrap_name = "ffi_wrapper_" .. rec.cfunc
-		object:add_record(c_source("src")({
-		"\n/* FFI wrapper for inline/macro call */\n",
-		"static ", ret_type, " ", wrap_name, params, " {\n",
-		call,
-		"}\n",
-		}))
-		object:add_record(ffi_export_function(ret_type)(wrap_name)(params))
+		local export_prefix = ""
+		if rec.ffi_need_wrapper == 'c_wrap' then
+			export_prefix = "ffi_wrapper_"
+			object:add_record(c_source("src")({
+			"\n/* FFI wrapper for inline/macro call */\n",
+			"static ", ret_type, " ", export_prefix, rec.cfunc, params, " {\n",
+			call,
+			"}\n",
+			}))
+		end
+		rec.ffi_export_prefix = export_prefix
+		object:add_record(ffi_export_function(ret_type)(export_prefix .. rec.cfunc)(params))
 	end,
 	}
 
@@ -1308,10 +1311,10 @@ local function process_module_file(file)
 		local func_start = rec.cfunc .. "("
 		src[#src+1] = func_start
 		ffi_cdef[#ffi_cdef+1] = func_start
-		if not rec.ffi_need_wrapper then
-			ffi_src[#ffi_src+1] = "C."
+		if rec.ffi_need_wrapper then
+			ffi_src[#ffi_src+1] = rec.ffi_export_prefix
 		else
-			ffi_src[#ffi_src+1] = "ffi_wrapper_"
+			ffi_src[#ffi_src+1] = "C."
 		end
 		ffi_src[#ffi_src+1] = func_start
 		-- convert params to "var_in" records.
@@ -1429,10 +1432,11 @@ local function process_module_file(file)
 	ffi_export_function = function(self, rec, parent)
 		local ffi_cdef={}
 		local ffi_src={}
+		local cdef_name = rec.name .. '_func'
 		-- pass C definition to FFI
 		ffi_cdef[#ffi_cdef+1] = 'typedef '
 		ffi_cdef[#ffi_cdef+1] = rec.ret .. " (*"
-		ffi_cdef[#ffi_cdef+1] = rec.name .. "_func)"
+		ffi_cdef[#ffi_cdef+1] = cdef_name .. ")"
 		local params = rec.params
 		if type(params) == 'string' then
 			ffi_cdef[#ffi_cdef+1] = params .. ";\n"
@@ -1462,11 +1466,11 @@ local function process_module_file(file)
 		parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
 		parent:insert_record(ffi_source("ffi_import")(ffi_src), idx+1)
 		-- check for duplicate ffi cdefs.
-		local cdef = ffi_cdefs[rec.name]
+		local cdef = ffi_cdefs[cdef_name]
 		if cdef and cdef ~= ffi_cdef then
 			error("Re-definition of FFI cdef: " .. cdef)
 		end
-		ffi_cdefs[rec.name] = ffi_cdef
+		ffi_cdefs[cdef_name] = ffi_cdef
 	end,
 	}
 	-- clear ffi cdefs
