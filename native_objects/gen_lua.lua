@@ -18,10 +18,10 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-
 --
--- output Lua bindings
+-- try generating LuaJIT FFI bindings to include into the C module.
 --
+require("native_objects.gen_lua_ffi")
 
 --
 -- templates
@@ -212,21 +212,6 @@ typedef struct obj_udata {
 
 /* use static pointer as key to weak userdata table. */
 static char *obj_udata_weak_ref_key = "obj_udata_weak_ref_key";
-
-#if LUAJIT_FFI
-typedef struct ffi_export_symbol {
-	const char *name;
-	void       *sym;
-} ffi_export_symbol;
-#endif
-]]
-
-local lua_value_ref = [[
-
-typedef struct lua_value_ref {
-	lua_State    *L;
-	int32_t      ref;
-}
 
 ]]
 
@@ -706,14 +691,10 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 	lua_pushvalue(L, -2); /* dup metatable. */
 	lua_rawset(L, LUA_REGISTRYINDEX);    /* REGISTRY[type] = metatable */
 
-#if LUAJIT_FFI
 	/* add metatable to 'priv_table' */
 	lua_pushstring(L, type->name);
 	lua_pushvalue(L, -2); /* dup metatable. */
 	lua_rawset(L, priv_table);    /* priv_table["<object_name>"] = metatable */
-#else
-	(void)priv_table;
-#endif
 
 	luaL_register(L, NULL, type_reg->metas); /* fill metatable */
 
@@ -738,99 +719,6 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 	lua_pop(L, 2);                      /* drop metatable & methods */
 }
 
-static FUNC_UNUSED int lua_checktype_ref(lua_State *L, int _index, int _type) {
-	luaL_checktype(L,_index,_type);
-	lua_pushvalue(L,_index);
-	return luaL_ref(L, LUA_REGISTRYINDEX);
-}
-
-#if LUAJIT_FFI
-static int nobj_udata_new_ffi(lua_State *L) {
-	size_t size = luaL_checkinteger(L, 1);
-	luaL_checktype(L, 2, LUA_TTABLE);
-	lua_settop(L, 2);
-	/* create userdata. */
-	lua_newuserdata(L, size);
-	lua_replace(L, 1);
-	/* set userdata's metatable. */
-	lua_setmetatable(L, 1);
-	return 1;
-}
-
-static const char nobj_ffi_support_key[] = "LuaNativeObject_FFI_SUPPORT";
-static const char nobj_check_ffi_support_code[] =
-"local stat, ffi=pcall(require,\"ffi\")\n" /* try loading LuaJIT`s FFI module. */
-"if not stat then return false end\n"
-"return true\n";
-
-static int nobj_check_ffi_support(lua_State *L) {
-	int rc;
-	int err;
-
-	/* check if ffi test has already been done. */
-	lua_pushstring(L, nobj_ffi_support_key);
-	lua_rawget(L, LUA_REGISTRYINDEX);
-	if(!lua_isnil(L, -1)) {
-		rc = lua_toboolean(L, -1);
-		lua_pop(L, 1);
-		return rc; /* return results of previous check. */
-	}
-	lua_pop(L, 1); /* pop nil. */
-
-	err = luaL_loadbuffer(L, nobj_check_ffi_support_code,
-		sizeof(nobj_check_ffi_support_code) - 1, nobj_ffi_support_key);
-	if(0 == err) {
-		err = lua_pcall(L, 0, 1, 0);
-	}
-	if(err) {
-		const char *msg = "<err not a string>";
-		if(lua_isstring(L, -1)) {
-			msg = lua_tostring(L, -1);
-		}
-		printf("Error when checking for FFI-support: %s\n", msg);
-		lua_pop(L, 1); /* pop error message. */
-		return 0;
-	}
-	/* check results of test. */
-	rc = lua_toboolean(L, -1);
-	lua_pop(L, 1); /* pop results. */
-		/* cache results. */
-	lua_pushstring(L, nobj_ffi_support_key);
-	lua_pushboolean(L, rc);
-	lua_rawset(L, LUA_REGISTRYINDEX);
-	return rc;
-}
-static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
-		const char *ffi_init_code, const ffi_export_symbol *ffi_exports, int priv_table)
-{
-	int err;
-
-	/* export symbols to priv_table. */
-	while(ffi_exports->name != NULL) {
-		lua_pushstring(L, ffi_exports->name);
-		lua_pushlightuserdata(L, ffi_exports->sym);
-		lua_settable(L, priv_table);
-		ffi_exports++;
-	}
-	err = luaL_loadbuffer(L, ffi_init_code, strlen(ffi_init_code), ffi_mod_name);
-	if(0 == err) {
-		lua_pushvalue(L, -2); /* dup C module's table. */
-		lua_pushvalue(L, priv_table); /* move priv_table to top of stack. */
-		lua_remove(L, priv_table);
-		lua_pushcfunction(L, nobj_udata_new_ffi);
-		err = lua_pcall(L, 3, 0, 0);
-	}
-	if(err) {
-		const char *msg = "<err not a string>";
-		if(lua_isstring(L, -1)) {
-			msg = lua_tostring(L, -1);
-		}
-		printf("Failed to install FFI-based bindings: %s\n", msg);
-		lua_pop(L, 1); /* pop error message. */
-	}
-	return err;
-}
-#endif
 ]]
 
 -- templates for typed *_check/*_delete/*_push macros.
@@ -924,11 +812,9 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 	const luaL_Reg *submodules = submodule_libs;
 	int priv_table = -1;
 
-#if LUAJIT_FFI
 	/* private table to hold reference to object metatables. */
 	lua_newtable(L);
 	priv_table = lua_gettop(L);
-#endif
 
 	/* create object cache. */
 	create_object_instance_cache(L);
@@ -959,12 +845,6 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 
 ${module_init_src}
 
-#if LUAJIT_FFI
-	if(nobj_check_ffi_support(L)) {
-		nobj_try_loading_ffi(L, "${module_c_name}", ${module_c_name}_ffi_lua_code,
-			${module_c_name}_ffi_export, priv_table);
-	}
-#endif
 	return 1;
 }
 ]]
@@ -975,11 +855,9 @@ LUA_NOBJ_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	const luaL_Reg null_reg_list = { NULL, NULL };
 	int priv_table = -1;
 
-#if LUAJIT_FFI
 	/* private table to hold reference to object metatables. */
 	lua_newtable(L);
 	priv_table = lua_gettop(L);
-#endif
 
 	/* create object cache. */
 	create_object_instance_cache(L);
@@ -997,425 +875,10 @@ LUA_NOBJ_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 
 ${module_init_src}
 
-#if ${module_c_name}_${object_name}_LUAJIT_FFI
-	if(nobj_check_ffi_support(L)) {
-		nobj_try_loading_ffi(L, "${module_c_name}_${object_name}",
-			${module_c_name}_${object_name}_ffi_lua_code,
-			${module_c_name}_${object_name}_ffi_export, priv_table);
-	}
-#endif
 	return 1;
 }
 
 ]]
-
---
--- FFI templates
---
-local ffi_helper_code = [===[
-local error = error
-local type = type
-local tonumber = tonumber
-local tostring = tostring
-local rawset = rawset
-
-local ffi=require"ffi"
-
-local _M, _priv, udata_new = ...
-
-local band = bit.band
-local d_getmetatable = debug.getmetatable
-local d_setmetatable = debug.setmetatable
-
-local OBJ_UDATA_FLAG_OWN		= 1
-local OBJ_UDATA_FLAG_LOOKUP	= 2
-local OBJ_UDATA_LAST_FLAG		= OBJ_UDATA_FLAG_LOOKUP
-
-local OBJ_TYPE_FLAG_WEAK_REF	= 1
-local OBJ_TYPE_SIMPLE					= 2
-
-local function ffi_safe_cdef(block_name, cdefs)
-	local fake_type = "struct sentinel_" .. block_name .. "_ty"
-	local stat, size = pcall(ffi.sizeof, fake_type)
-	if stat and size > 0 then
-		-- already loaded this cdef block
-		return
-	end
-	cdefs = fake_type .. "{ int a; int b; int c; };" .. cdefs
-	return ffi.cdef(cdefs)
-end
-
-ffi_safe_cdef("LuaNativeObjects", [[
-
-typedef struct obj_type obj_type;
-
-typedef void (*base_caster_t)(void **obj);
-
-typedef void (*dyn_caster_t)(void **obj, obj_type **type);
-
-struct obj_type {
-	dyn_caster_t    dcaster;  /**< caster to support casting to sub-objects. */
-	int32_t         id;       /**< type's id. */
-	uint32_t        flags;    /**< type's flags (weak refs) */
-	const char      *name;    /**< type's object name. */
-};
-
-typedef struct obj_base {
-	int32_t        id;
-	base_caster_t  bcaster;
-} obj_base;
-
-typedef struct obj_udata {
-	void     *obj;
-	uint32_t flags;  /**< lua_own:1bit */
-} obj_udata;
-
-]])
-
--- cache mapping of cdata to userdata
-local weak_objects = setmetatable({}, { __mode = "v" })
-
-local function obj_udata_luacheck_internal(obj, type_mt, not_delete)
-	local obj_mt = d_getmetatable(obj)
-	if obj_mt == type_mt then
-		-- convert userdata to cdata.
-		return ffi.cast("obj_udata *", obj)
-	end
-	if not_delete then
-		error("(expected `" .. type_mt['.name'] .. "`, got " .. type(obj) .. ")", 3)
-	end
-end
-
-local function obj_udata_luacheck(obj, type_mt)
-	local ud = obj_udata_luacheck_internal(obj, type_mt, true)
-	return ud.obj
-end
-
-local function obj_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
-	-- convert userdata to cdata.
-	local c_obj = ffi.cast(c_type, obj_udata_luacheck(ud_obj, ud_mt))
-	-- cache converted cdata
-	rawset(objects, ud_obj, c_obj)
-	return c_obj
-end
-
-local function obj_udata_luadelete(ud_obj, type_mt)
-	local ud = obj_udata_luacheck_internal(ud_obj, type_mt, false)
-	if not ud then return nil, 0 end
-	local obj, flags = ud.obj, ud.flags
-	-- null userdata.
-	ud.obj = nil
-	ud.flags = 0
-	-- invalid userdata, by setting the metatable to nil.
-	d_setmetatable(ud_obj, nil)
-	return obj, flags
-end
-
-local function obj_udata_luapush(obj, type_mt, obj_type, flags)
-	if obj == nil then return end
-
-	-- apply type's dynamic caster.
-	if obj_type.dcaster ~= nil then
-		local obj_ptr = ffi.new("void *[1]", obj)
-		local type_ptr = ffi.new("obj_type *[1]", obj_type)
-		obj_type.dcaster(obj_ptr, type_ptr)
-		obj = obj_ptr[1]
-		type = type_ptr[1]
-	end
-
-	-- create new userdata
-	local ud_obj = udata_new(ffi.sizeof"obj_udata", type_mt)
-	local ud = ffi.cast("obj_udata *", ud_obj)
-	-- init. object
-	ud.obj = obj
-	ud.flags = flags
-
-	return ud_obj
-end
-
-local function obj_udata_luadelete_weak(ud_obj, type_mt)
-	local ud = obj_udata_luacheck_internal(ud_obj, type_mt, false)
-	if not ud then return nil, 0 end
-	local obj, flags = ud.obj, ud.flags
-	-- null userdata.
-	ud.obj = nil
-	ud.flags = 0
-	-- invalid userdata, by setting the metatable to nil.
-	d_setmetatable(ud_obj, nil)
-	-- remove object from weak ref. table.
-	local obj_key = tonumber(ffi.cast('uintptr_t', obj))
-	weak_objects[obj_key] = nil
-	return obj, flags
-end
-
-local function obj_udata_luapush_weak(obj, type_mt, obj_type, flags)
-	if obj == nil then return end
-
-	-- apply type's dynamic caster.
-	if obj_type.dcaster ~= nil then
-		local obj_ptr = ffi.new("void *[1]", obj)
-		local type_ptr = ffi.new("obj_type *[1]", obj_type)
-		obj_type.dcaster(obj_ptr, type_ptr)
-		obj = obj_ptr[1]
-		type = type_ptr[1]
-	end
-
-	-- lookup object in weak ref. table.
-	local obj_key = tonumber(ffi.cast('uintptr_t', obj))
-	local ud_obj = weak_objects[obj_key]
-	if ud_obj ~= nil then return ud_obj end
-
-	-- create new userdata
-	ud_obj = udata_new(ffi.sizeof"obj_udata", type_mt)
-	local ud = ffi.cast("obj_udata *", ud_obj)
-	-- init. object
-	ud.obj = obj
-	ud.flags = flags
-
-	-- cache weak reference to object.
-	weak_objects[obj_key] = ud_obj
-
-	return ud_obj
-end
-
-local function obj_simple_udata_luacheck(ud_obj, type_mt)
-	local obj_mt = d_getmetatable(ud_obj)
-	if obj_mt == type_mt then
-		-- convert userdata to cdata.
-		return ffi.cast("void *", ud_obj)
-	end
-	error("(expected `" .. type_mt['.name'] .. "`, got " .. type(ud_obj) .. ")", 3)
-end
-
-local function obj_simple_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
-	-- convert userdata to cdata.
-	local c_obj = ffi.cast(c_type, obj_simple_udata_luacheck(ud_obj, ud_mt))[0]
-	-- cache converted cdata
-	rawset(objects, ud_obj, c_obj)
-	return c_obj
-end
-
-local function obj_embed_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
-	-- convert userdata to cdata.
-	local c_obj = ffi.cast(c_type, obj_simple_udata_luacheck(ud_obj, ud_mt))
-	-- cache converted cdata
-	rawset(objects, ud_obj, c_obj)
-	return c_obj
-end
-
-local function obj_simple_udata_luadelete(ud_obj, type_mt)
-	-- invalid userdata, by setting the metatable to nil.
-	d_setmetatable(ud_obj, nil)
-end
-
-local function obj_simple_udata_luapush(c_obj, size, type_mt)
-	if c_obj == nil then return end
-
-	-- create new userdata
-	local ud_obj = udata_new(size, type_mt)
-	local cdata = ffi.cast("void *", ud_obj)
-	-- init. object
-	ffi.copy(cdata, c_obj, size)
-
-	return ud_obj, cdata
-end
-
-]===]
-
--- templates for typed *_check/*_delete/*_push functions
-local ffi_obj_type_check_delete_push = {
-['simple'] = [[
-local obj_type_${object_name}_check
-local obj_type_${object_name}_delete
-local obj_type_${object_name}_push
-
-do
-local ${object_name}_mt = _priv.${object_name}
-ffi_safe_cdef("${object_name}_simple_wrapper", [=[
-struct ${object_name}_t {
-	${object_name} _wrapped_val;
-};
-typedef struct ${object_name}_t ${object_name}_t;
-]=])
-local ${object_name}_sizeof = ffi.sizeof"${object_name}_t"
-
-function obj_type_${object_name}_check(wrap_obj)
-	return wrap_obj._wrapped_val
-end
-
-function obj_type_${object_name}_delete(wrap_obj)
-	local this = wrap_obj._wrapped_val
-	ffi.fill(wrap_obj, ${object_name}_sizeof, 0)
-	return this
-end
-
-function obj_type_${object_name}_push(this)
-	local wrap_obj = ffi.new("${object_name}_t")
-	wrap_obj._wrapped_val = this
-	return wrap_obj
-end
-
-function ${object_name}_mt:__tostring()
-	return "${object_name}: " .. tostring(self._wrapped_val)
-end
---${object_name}_mt.__tostring = nil
-function ${object_name}_mt.__eq(val1, val2)
-	if not ffi.istype("${object_name}_t", val2) then return false end
-	return val1._wrapped_val
-end
-
-end
-
-]],
-['embed'] = [[
-local obj_type_${object_name}_check
-local obj_type_${object_name}_delete
-local obj_type_${object_name}_push
-
-do
-local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-
-function obj_type_${object_name}_check(obj)
-	return obj
-end
-
-function obj_type_${object_name}_delete(obj)
-	return obj
-end
-
-function obj_type_${object_name}_push(obj)
-	return obj
-end
-
-function ${object_name}_mt:__tostring()
-	return "${object_name}: " .. tostring(ffi.cast('void *', self))
-end
-${object_name}_mt.__tostring = nil
-${object_name}_mt.__eq = nil
-
-end
-
-]],
-['cast pointer'] = [[
-local obj_type_${object_name}_check
-local obj_type_${object_name}_delete
-local obj_type_${object_name}_push
-
-do
-local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k",
-__index = function(objects, ud_obj)
-	-- cdata object not in cache
-	local c_obj = tonumber(ffi.cast('uintptr_t', obj_udata_luacheck(ud_obj, ${object_name}_mt)))
-	c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
-	rawset(objects, ud_obj, c_obj)
-	return c_obj
-end,
-})
-function obj_type_${object_name}_check(ud_obj)
-	return ${object_name}_objects[ud_obj]
-end
-
-function obj_type_${object_name}_delete(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	${object_name}_objects[ud_obj] = nil
-	local c_ptr, flags = obj_udata_luadelete(ud_obj, ${object_name}_mt)
-	if c_obj == nil then
-		c_obj = tonumber(ffi.cast('uintptr_t', c_ptr))
-	end
-	return c_obj, flags
-end
-
-local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
-function obj_type_${object_name}_push(c_obj, flags)
-	local ud_obj = obj_udata_luapush(ffi.cast('void *', c_obj), ${object_name}_mt,
-		${object_name}_type, flags)
-	${object_name}_objects[ud_obj] = c_obj
-	return ud_obj
-end
-end
-
-]],
-['generic'] = [[
-local obj_type_${object_name}_check
-local obj_type_${object_name}_delete
-local obj_type_${object_name}_push
-
-do
-local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k",
-__index = function(objects, ud_obj)
-	return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
-end,
-})
-function obj_type_${object_name}_check(ud_obj)
-	return ${object_name}_objects[ud_obj]
-end
-
-function obj_type_${object_name}_delete(ud_obj)
-	${object_name}_objects[ud_obj] = nil
-	return obj_udata_luadelete(ud_obj, ${object_name}_mt)
-end
-
-local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
-function obj_type_${object_name}_push(c_obj, flags)
-	local ud_obj = obj_udata_luapush(c_obj, ${object_name}_mt, ${object_name}_type, flags)
-	${object_name}_objects[ud_obj] = c_obj
-	return ud_obj
-end
-end
-
-]],
-['generic_weak'] = [[
-local obj_type_${object_name}_check
-local obj_type_${object_name}_delete
-local obj_type_${object_name}_push
-
-do
-local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k",
-__index = function(objects, ud_obj)
-	return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
-end,
-})
-function obj_type_${object_name}_check(ud_obj)
-	return ${object_name}_objects[ud_obj]
-end
-
-function obj_type_${object_name}_delete(ud_obj)
-	${object_name}_objects[ud_obj] = nil
-	return obj_udata_luadelete_weak(ud_obj, ${object_name}_mt)
-end
-
-local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
-function obj_type_${object_name}_push(c_obj, flags)
-	local ud_obj = obj_udata_luapush_weak(c_obj, ${object_name}_mt, ${object_name}_type, flags)
-	${object_name}_objects[ud_obj] = c_obj
-	return ud_obj
-end
-end
-
-]],
-}
-
--- module template
-local ffi_module_template = [[
-local _pub = {}
-local _meth = {}
-for obj_name,mt in pairs(_priv) do
-	if type(mt) == 'table' and mt.__index then
-		_meth[obj_name] = mt.__index
-	end
-end
-_pub.${object_name} = _M
-for obj_name,pub in pairs(_M) do
-	_pub[obj_name] = pub
-end
-
-]]
-
-local ffi_submodule_template = ffi_module_template
 
 -- re-map meta-methods.
 local lua_meta_methods = {
@@ -1494,20 +957,7 @@ end
 local function add_field(rec, field)
 end
 
-local function dump_lua_code_to_c_str(code)
-	-- make Lua code C-safe
-	code = code:gsub('[\n"\\%z]', {
-	['\n'] = "\\n\"\n\"",
-	['\r'] = "\\r",
-	['"'] = [[\"]],
-	['\\'] = [[\\]],
-	['\0'] = [[\0]],
-	})
-	return '"' .. code .. '";'
-end
-
 local function reg_object_function(self, func, object)
-	local ffi_table = '_meth'
 	local name = func.name
 	local c_name = func.c_name
 	local reg_list
@@ -1517,10 +967,6 @@ local function reg_object_function(self, func, object)
 		if not self._cur_module.disable__gc and not object.disable__gc then
 			object:write_part('metas_regs',
 				{'  {"__gc", ', func.c_name, '},\n'})
-			if not func._is_hidden then
-				object:write_part('ffi_metas_regs',
-					{'_priv.${object_name}.__gc = ', ffi_table,'.${object_name}.', func.c_name, '\n'})
-			end
 		end
 		if func._is_hidden then
 			-- don't register '__gc' metamethods as a public object method.
@@ -1530,23 +976,19 @@ local function reg_object_function(self, func, object)
 		reg_list = object.methods_regs
 	elseif func.is_constructor then
 		reg_list = "pub_funcs_regs"
-		ffi_table = '_pub'
 	elseif func._is_meta_method then
 		reg_list = "metas_regs"
-		ffi_table = '_priv'
 		-- use Lua's __* metamethod names
 		name = lua_meta_methods[func.name]
 	elseif func._is_method then
 		reg_list = object.methods_regs
-		ffi_table = '_meth'
 	else
 		reg_list = object.functions_regs
-		ffi_table = '_pub'
 	end
 	-- add method to reg list.
 	object:write_part(reg_list,
 		{'  {"', name, '", ', c_name, '},\n'})
-	return ffi_table, name
+	return name
 end
 
 print"============ Lua bindings ================="
@@ -1584,9 +1026,6 @@ c_module = function(self, rec, parent)
 	if rec.hide_meta_info == nil then rec.hide_meta_info = true end
 	rec:write_part("defines",
 		{'#define OBJ_DATA_HIDDEN_METATABLE ',(rec.hide_meta_info and 1 or 0),'\n'})
-	-- luajit_ffi?
-	rec:write_part("defines",
-		{'#define LUAJIT_FFI ',(rec.luajit_ffi and 1 or 0),'\n'})
 	-- field access method: obj:field()/obj:set_field() or obj.field
 	rec:write_part("defines",
 		{'#define USE_FIELD_GET_SET_METHODS ',(rec.use_field_get_set_methods and 1 or 0),'\n'})
@@ -1595,21 +1034,6 @@ c_module = function(self, rec, parent)
 	rec.methods_regs = 'function_regs'
 	rec:write_part(rec.methods_regs,
 		{'static const luaL_reg ${module_c_name}_function[] = {\n'})
-	-- symbols to export to FFI
-	rec:write_part("ffi_export",
-		{'static const ffi_export_symbol ${module_c_name}_ffi_export[] = {\n'})
-	-- start two ffi.cdef code blocks (one for typedefs and one for function prototypes).
-	rec:write_part("ffi_typedef", {
-	'ffi.cdef[[\n'
-	})
-	rec:write_part("ffi_cdef", {
-	'ffi.cdef[[\n'
-	})
-	-- add module's FFI template
-	rec:write_part("ffi_obj_type", {
-		ffi_module_template,
-		'\n'
-	})
 end,
 c_module_end = function(self, rec, parent)
 	-- end obj_type array
@@ -1632,18 +1056,6 @@ c_module_end = function(self, rec, parent)
 	'  {NULL, NULL}\n',
 	'};\n\n'
 	})
-	-- end list of FFI symbols
-	rec:write_part("ffi_export", {
-	'  {NULL, NULL}\n',
-	'};\n\n'
-	})
-	-- end ffi.cdef code blocks
-	rec:write_part("ffi_typedef", {
-	'\n]]\n\n'
-	})
-	rec:write_part("ffi_cdef", {
-	'\n]]\n\n'
-	})
 	-- build constants list
 	rec:write_part("const_regs",
 		{'static const obj_const ${module_c_name}_constants[] = {\n'})
@@ -1660,28 +1072,15 @@ c_module_end = function(self, rec, parent)
 	rec:add_var("module_init_src", rec:dump_parts{ "module_init_src"})
 	rec:write_part("luaopen", luaopen_main)
 	rec:write_part("helper_funcs", objHelperFunc)
-	-- encode luajit ffi code
-	if rec.luajit_ffi then
-		local ffi_code = ffi_helper_code .. rec:dump_parts{
-			"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
-			"ffi_metas_regs", "ffi_extends"
-		}
-		rec:write_part("ffi_code",
-		{'\nstatic const char ${module_c_name}_ffi_lua_code[] = ', dump_lua_code_to_c_str(ffi_code)
-		})
-	end
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "src" })
 	-- combine reg arrays into one part.
 	local arrays = {
 		"function_regs", "methods_regs", "metas_regs", "base_regs", "field_regs", "const_regs"}
-	if rec.luajit_ffi then
-		arrays[#arrays + 1] = "ffi_export"
-	end
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
 	local parts = { "defines", "funcdefs", "reg_sub_modules", "submodule_regs", "submodule_libs",
-		"helper_funcs", "ffi_code", "extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
+		"helper_funcs", "extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
 	rec:vars_parts(parts)
 
 	self._cur_module = nil
@@ -1695,18 +1094,11 @@ error_code = function(self, rec, parent)
 		'typedef ', rec.c_type, ' ${object_name};\n\n',
 		func_def, ';\n'
 	})
-	rec:write_part("ffi_typedef", {
-		'typedef ', rec.c_type, ' ', rec.name, ';\n\n',
-	})
 	-- start push error function.
 	rec:write_part('src', {func_def, ' {\n'})
 	-- add C variable for error string to be pushed.
 	rec:write_part("src",
 		{'  const char *err_str = NULL;\n'})
-	rec:write_part("ffi_src", {
-		'local function ',rec.func_name,'(err)\n',
-		'  local err_str\n'
-		})
 end,
 error_code_end = function(self, rec, parent)
 	-- push error value onto the stack.
@@ -1719,11 +1111,6 @@ error_code_end = function(self, rec, parent)
 }
 
 ]])
-	rec:write_part("ffi_src", [[
-	return err_str
-end
-
-]])
 	-- append custom error push function.
 	local parts = { "funcdefs", "src" }
 	rec:vars_parts(parts)
@@ -1731,13 +1118,6 @@ end
 	-- append custom error push function.
 	parent:write_part("methods", rec:dump_parts{ "src" })
 
-	-- don't generate FFI bindings
-	if self._cur_module.ffi_manual_bindings then return end
-
-	-- copy generated FFI bindings to parent
-	local ffi_parts = { "ffi_typedef", "ffi_cdef", "ffi_src" }
-	rec:vars_parts(ffi_parts)
-	parent:copy_parts(rec, ffi_parts)
 end,
 object = function(self, rec, parent)
 	rec:add_var('object_name', rec.name)
@@ -1766,37 +1146,6 @@ object = function(self, rec, parent)
 	rec.functions_regs = 'pub_funcs_regs'
 	rec:write_part("pub_funcs_regs",
 		{'static const luaL_reg obj_${object_name}_pub_funcs[] = {\n'})
-	-- FFI code
-	rec:write_part("ffi_src",
-		{'\n-- Start "${object_name}" FFI interface\n'})
-	-- Sub-module FFI code
-	if rec.register_as_submodule then
-		-- luajit_ffi?
-		rec:write_part("defines",
-			{'#define ${module_c_name}_${object_name}_LUAJIT_FFI ',(rec.luajit_ffi and 1 or 0),'\n'})
-		-- symbols to export to FFI
-		rec:write_part("ffi_export",
-			{'\nstatic const ffi_export_symbol ${module_c_name}_${object_name}_ffi_export[] = {\n'})
-		-- start two ffi.cdef code blocks (one for typedefs and one for function prototypes).
-		rec:write_part("ffi_typedef", {
-		'ffi.cdef[[\n'
-		})
-		rec:write_part("ffi_cdef", {
-		'ffi.cdef[[\n'
-		})
-		-- add module's FFI template
-		rec:write_part("ffi_obj_type", {
-			ffi_submodule_template,
-			'\n'
-		})
-	end
-	-- FFI typedef
-	if not rec.is_package then
-		local ffi_type = rec.ffi_type or 'struct ${object_name}'
-		rec:write_part("ffi_typedef", {
-			'typedef ', ffi_type, ' ${object_name};\n',
-		})
-	end
 end,
 object_end = function(self, rec, parent)
 	-- check for dyn_caster
@@ -1812,11 +1161,6 @@ object_end = function(self, rec, parent)
 	if not rec.is_package then
 		rec:write_part("obj_check_delete_push", {
 			rec.c_custom_check_delete_push or obj_type_check_delete_push[ud_type],
-			'\n'
-		})
-		-- create FFI check/delete/push functions
-		rec:write_part("ffi_obj_type", {
-			rec.ffi_custom_check_delete_push or ffi_obj_type_check_delete_push[ud_type],
 			'\n'
 		})
 	end
@@ -1919,46 +1263,9 @@ object_end = function(self, rec, parent)
 			'obj_${object_name}_methods, obj_${object_name}_metas, obj_${object_name}_bases, ',
 			'obj_${object_name}_fields, obj_${object_name}_constants, ',bidirectional,'}'
 		}
-		if ud_type == 'simple' then
-			rec:write_part("ffi_src",{
-				'ffi.metatype("${object_name}_t", _priv.${object_name})\n'})
-		else
-			rec:write_part("ffi_src",{
-				'ffi.metatype("${object_name}", _priv.${object_name})\n'})
-		end
 	end
-	-- end object's FFI source
-	rec:write_part("ffi_src",
-		{'-- End "${object_name}" FFI interface\n\n'})
 
 	if rec.register_as_submodule then
-		-- Sub-module FFI code
-		if self._cur_module.luajit_ffi and rec.luajit_ffi then
-			-- end list of FFI symbols
-			rec:write_part("ffi_export", {
-			'  {NULL, NULL}\n',
-			'};\n\n'
-			})
-			-- end ffi.cdef code blocks
-			rec:write_part("ffi_typedef", {
-			'\n]]\n\n'
-			})
-			rec:write_part("ffi_cdef", {
-			'\n]]\n\n'
-			})
-			local ffi_code = ffi_helper_code .. rec:dump_parts{
-				"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
-				"ffi_metas_regs", "ffi_extends"
-			}
-			rec:write_part("ffi_code",
-			{'\nstatic const char ${module_c_name}_${object_name}_ffi_lua_code[] = ',
-				dump_lua_code_to_c_str(ffi_code)
-			})
-			-- copy ffi_code to partent
-			rec:vars_parts{ "ffi_code", "ffi_export" }
-			parent:copy_parts(rec, { "ffi_code" })
-			rec:write_part("luaopen_defs", rec:dump_parts{ "ffi_export" })
-		end
 		-- add submodule luaopen function.
 		rec:add_var("module_init_src", rec:dump_parts{ "module_init_src"})
 		rec:write_part("luaopen", luaopen_submodule)
@@ -1974,21 +1281,6 @@ object_end = function(self, rec, parent)
 	else
 		rec:write_part("reg_sub_modules", object_reg_info)
 		rec:write_part("reg_sub_modules", ",\n")
-		-- apply variables to FFI parts
-		local ffi_parts = { "ffi_obj_type", "ffi_export" }
-		rec:vars_parts(ffi_parts)
-		-- copy parts to parent
-		parent:copy_parts(rec, ffi_parts)
-
-		-- don't generate FFI bindings
-		if self._cur_module.ffi_manual_bindings then return end
-
-		-- copy generated FFI bindings to parent
-		local ffi_parts = { "ffi_typedef", "ffi_cdef", "ffi_import", "ffi_src",
-			"ffi_metas_regs", "ffi_extends"
-		}
-		rec:vars_parts(ffi_parts)
-		parent:copy_parts(rec, ffi_parts)
 	end
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "src" })
@@ -2026,7 +1318,7 @@ callback_state_end = function(self, rec, parent)
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "wrapper_obj" })
 	-- apply variables to parts
-	local parts = {"funcdefs", "methods", "extra_code", "ffi_typedef", "ffi_cdef", "ffi_src"}
+	local parts = {"funcdefs", "methods", "extra_code"}
 	rec:vars_parts(parts)
 	-- copy parts to parent
 	parent:copy_parts(rec, parts)
@@ -2055,26 +1347,14 @@ extends = function(self, rec, parent)
 	local base_cast = 'NULL'
 	if base == nil then return end
 	-- add methods/fields/constants from base object
-	parent:write_part("ffi_src",
-		{'-- Clear out methods from base class, to allow ffi-based methods from base class\n'})
-	parent:write_part("ffi_extends",
-		{'-- Copy ffi methods from base class to sub class.\n'})
 	for name,val in pairs(base.name_map) do
 		-- make sure sub-class has not override name.
 		if parent.name_map[name] == nil then
 			parent.name_map[name] = val
 			if val._is_method and not val.is_constructor then
-				local method_class = val._parent
 				parent.functions[name] = val
 				-- register base class's method with sub class
-				local ffi_table, name = reg_object_function(self, val, parent)
-				-- write ffi code to remove registered base class method.
-				parent:write_part("ffi_src",
-				{ffi_table,'.${object_name}.', name, ' = nil\n'})
-				-- write ffi code to copy method from base class.
-				parent:write_part("ffi_extends",
-				{ffi_table,'.${object_name}.',name,' = ',
-					ffi_table,'.',base.name,'.',name,'\n'})
+				reg_object_function(self, val, parent)
 			elseif val._rec_type == 'field' then
 				parent.fields[name] = val
 			elseif val._rec_type == 'const' then
@@ -2256,7 +1536,7 @@ c_function = function(self, rec, parent)
 		rec.__gc = true -- mark as '__gc' method
 	end
 	-- register method/function with object.
-	local ffi_table, name = reg_object_function(self, rec, parent)
+	local name = reg_object_function(self, rec, parent)
 
 	rec:write_part("pre",
 	{'/* method: ', rec.name, ' */\n',
@@ -2268,10 +1548,6 @@ c_function = function(self, rec, parent)
 			{ '  ', wrap_type,' *wrap;\n',
 			})
 	end
-	-- generate FFI function
-	rec:write_part("ffi_pre",
-	{'-- method: ', name, '\n',
-		'function ',ffi_table,'.${object_name}.', name, '(',rec.ffi_params,')\n'})
 end,
 c_function_end = function(self, rec, parent)
 	-- is this a wrapper function
@@ -2309,42 +1585,8 @@ c_function_end = function(self, rec, parent)
 	-- finialize C function code.
 	self._cur_module:write_part('methods', rec:dump_parts(parts))
 
-	-- don't generate FFI bindings
-	if self._cur_module.ffi_manual_bindings then return end
-
-	-- check if function has FFI support
-	local ffi_src = rec:dump_parts("ffi_src")
-	if rec.no_ffi or #ffi_src == 0 then return end
-
-	-- end Lua code for FFI function
-	local ffi_parts = {"ffi_temps", "ffi_pre", "ffi_src", "ffi_post"}
-	local ffi_return = rec:dump_parts("ffi_return")
-	-- trim last ', ' from list of return values.
-	ffi_return = ffi_return:gsub(", $","")
-	rec:write_part("ffi_post",
-		{'  return ', ffi_return,'\n',
-		 'end\n\n'})
-
-	rec:vars_parts(ffi_parts)
-	-- append FFI-based function to parent's FFI source
-	local ffi_cdef = { "ffi_cdef" }
-	rec:vars_parts(ffi_cdef)
-	parent:write_part("ffi_cdef", rec:dump_parts(ffi_cdef))
-	parent:write_part("ffi_src", rec:dump_parts(ffi_parts))
 end,
 c_source = function(self, rec, parent)
-	parent:write_part(rec.part, rec.src)
-	parent:write_part(rec.part, "\n")
-end,
-ffi_export = function(self, rec, parent)
-	parent:write_part("ffi_export",
-		{'{ "', rec.name, '", ', rec.name, ' },\n'})
-end,
-ffi_export_function = function(self, rec, parent)
-	parent:write_part("ffi_export",
-		{'{ "', rec.name, '", ', rec.name, ' },\n'})
-end,
-ffi_source = function(self, rec, parent)
 	parent:write_part(rec.part, rec.src)
 	parent:write_part(rec.part, "\n")
 end,
@@ -2371,20 +1613,11 @@ var_in = function(self, rec, parent)
 			parent:write_part("pre_src", {
 				'  if(!(',flags,' & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
 				})
-			parent:write_part("ffi_pre",
-				{
-				'  ', lua:_ffi_delete(rec, true),
-				'  if(band(',flags,',OBJ_UDATA_FLAG_OWN) == 0) then return end\n',
-				})
 		else
 			-- for garbage collect method, check the ownership flag before freeing 'this' object.
 			parent:write_part("pre",
 				{
 				'  ', rec.c_type, lua:_delete(rec, false),
-				})
-			parent:write_part("ffi_pre",
-				{
-				'  ', lua:_ffi_delete(rec, false),
 				})
 		end
 	elseif lua._rec_type ~= 'callback_func' then
@@ -2397,18 +1630,14 @@ var_in = function(self, rec, parent)
 			})
 		end
 		-- check lua value matches type.
-		local get, ffi_get
+		local get
 		if rec.is_optional then
 			get = lua:_opt(rec, rec.default)
-			ffi_get = lua:_ffi_opt(rec, rec.default)
 		else
 			get = lua:_check(rec)
-			ffi_get = lua:_ffi_check(rec)
 		end
 		parent:write_part("pre",
 			{'  ', rec.c_type, get })
-		parent:write_part("ffi_pre",
-			{'  ', ffi_get })
 	end
 	-- is a lua reference.
 	if lua.is_ref then
@@ -2429,9 +1658,6 @@ var_out = function(self, rec, parent)
 		parent:write_part("pre",{
 			'  int ',flags,' = OBJ_UDATA_FLAG_OWN;\n'
 		})
-		parent:write_part("ffi_pre",{
-			'  local ',flags,' = OBJ_UDATA_FLAG_OWN\n'
-		})
 	end
 	if not rec.has_obj_flags then
 		flags = false
@@ -2441,9 +1667,6 @@ var_out = function(self, rec, parent)
 	-- don't generate code for '<any>' type parameters
 	if rec.c_type == '<any>' then
 		parent.pushed_values = parent.pushed_values + 1
-		parent:write_part("ffi_pre",
-			{'  local ${', rec.name, '}\n'})
-		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 		return
 	end
 
@@ -2455,9 +1678,6 @@ var_out = function(self, rec, parent)
 		parent:write_part("pre",{
 			'  size_t ${', rec.name ,'_len} = 0;\n'
 		})
-		parent:write_part("ffi_pre",{
-			'  local ${', rec.name ,'_len} = 0\n'
-		})
 	end
 	-- if the variable's type has a default value, then initialize the variable.
 	local init = ''
@@ -2467,18 +1687,6 @@ var_out = function(self, rec, parent)
 	-- add C variable to hold value to be pushed.
 	parent:write_part("pre",
 		{'  ', rec.c_type, ' ${', rec.name, '}', init, ';\n'})
-	local ffi_unwrap = ''
-	if rec.wrap == '&' then
-		local temp_name = "${function_name}_" .. rec.name .. "_tmp"
-		parent:write_part("ffi_temps",
-			{'  local ', temp_name, ' = ffi.new("',rec.c_type,'[1]")\n'})
-		parent:write_part("ffi_pre",
-			{'  local ${', rec.name, '} = ', temp_name,'\n'})
-		ffi_unwrap = '[0]'
-	else
-		parent:write_part("ffi_pre",
-			{'  local ${', rec.name, '}\n'})
-	end
 	-- if this is a temp. variable, then we are done.
 	if rec.is_temp then
 		return
@@ -2502,25 +1710,8 @@ var_out = function(self, rec, parent)
 			'    lua_pushnil(L);\n',
 			'  }\n',
 			})
-			if err_type.ffi_is_error_check then
-				parent:write_part("ffi_post", {
-				'  -- check for error.\n',
-				'  local ${', rec.name,'}_err\n',
-				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
-				'    ${', rec.name, '}_err = ', lua:_ffi_push(rec, flags),
-				'    ${', rec.name ,'} = nil\n',
-				'  else\n',
-				'    ${', rec.name ,'} = true\n',
-				'  end\n',
-				})
-			end
-			parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
 		else
 			parent:write_part("post", { lua:_push(rec, flags) })
-			parent:write_part("ffi_post", {
-				'  ${', rec.name ,'} = ', lua:_ffi_push(rec, flags), ffi_unwrap
-			})
-			parent:write_part("ffi_return", { "${", rec.name, "}, " })
 		end
 	elseif rec.no_nil_on_error ~= true and error_code then
 		local err_type = error_code.c_type_rec
@@ -2532,16 +1723,6 @@ var_out = function(self, rec, parent)
 		'    lua_pushnil(L);\n',
 		'  }\n',
 		})
-		if err_type.ffi_is_error_check then
-			parent:write_part("ffi_post", {
-			'  if not ',err_type.ffi_is_error_check(error_code),' then\n',
-			'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags), ffi_unwrap,
-			'  else\n',
-			'    ${', rec.name, '} = nil\n',
-			'  end\n',
-			})
-		end
-		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 	elseif rec.is_error_on_null then
 		-- if a function return NULL, then there was an error.
 		parent:write_part("post", {
@@ -2552,21 +1733,8 @@ var_out = function(self, rec, parent)
 		'  ', lua:_push(rec, flags),
 		'  }\n',
 		})
-		parent:write_part("ffi_post", {
-		'  local ${', rec.name,'}_err\n',
-		'  if ',lua.ffi_is_error_check(rec),' then\n',
-		'    ${', rec.name, '}_err = ', lua:_ffi_push_error(rec), ffi_unwrap,
-		'  else\n',
-		'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags), ffi_unwrap,
-		'  end\n',
-		})
-		parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
 	else
 		parent:write_part("post", { lua:_push(rec, flags) })
-		parent:write_part("ffi_post", {
-			'  ${', rec.name ,'} = ', lua:_ffi_push(rec, flags), ffi_unwrap
-		})
-		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 	end
 	parent.pushed_values = parent.pushed_values + push_count
 end,
@@ -2617,7 +1785,6 @@ for name,mod in pairs(parsed._modules_out) do
 			"obj_types",
 			"helper_funcs",
 			"obj_check_delete_push",
-			"ffi_code",
 			"extra_code",
 			"methods",
 			"reg_arrays",
