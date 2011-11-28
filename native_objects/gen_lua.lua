@@ -758,6 +758,49 @@ static int nobj_udata_new_ffi(lua_State *L) {
 	return 1;
 }
 
+static const char nobj_ffi_support_key[] = "LuaNativeObject_FFI_SUPPORT";
+static const char nobj_check_ffi_support_code[] =
+"local stat, ffi=pcall(require,\"ffi\")\n" /* try loading LuaJIT`s FFI module. */
+"if not stat then return false end\n"
+"return true\n";
+
+static int nobj_check_ffi_support(lua_State *L) {
+	int rc;
+	int err;
+
+	/* check if ffi test has already been done. */
+	lua_pushstring(L, nobj_ffi_support_key);
+	lua_rawget(L, LUA_REGISTRYINDEX);
+	if(!lua_isnil(L, -1)) {
+		rc = lua_toboolean(L, -1);
+		lua_pop(L, 1);
+		return rc; /* return results of previous check. */
+	}
+	lua_pop(L, 1); /* pop nil. */
+
+	err = luaL_loadbuffer(L, nobj_check_ffi_support_code,
+		sizeof(nobj_check_ffi_support_code) - 1, nobj_ffi_support_key);
+	if(0 == err) {
+		err = lua_pcall(L, 0, 1, 0);
+	}
+	if(err) {
+		const char *msg = "<err not a string>";
+		if(lua_isstring(L, -1)) {
+			msg = lua_tostring(L, -1);
+		}
+		printf("Error when checking for FFI-support: %s\n", msg);
+		lua_pop(L, 1); /* pop error message. */
+		return 0;
+	}
+	/* check results of test. */
+	rc = lua_toboolean(L, -1);
+	lua_pop(L, 1); /* pop results. */
+		/* cache results. */
+	lua_pushstring(L, nobj_ffi_support_key);
+	lua_pushboolean(L, rc);
+	lua_rawset(L, LUA_REGISTRYINDEX);
+	return rc;
+}
 static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
 		const char *ffi_init_code, const ffi_export_symbol *ffi_exports, int priv_table)
 {
@@ -918,8 +961,10 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 ${module_init_src}
 
 #if LUAJIT_FFI
-	nobj_try_loading_ffi(L, "${module_c_name}", ${module_c_name}_ffi_lua_code,
-		${module_c_name}_ffi_export, priv_table);
+	if(nobj_check_ffi_support(L)) {
+		nobj_try_loading_ffi(L, "${module_c_name}", ${module_c_name}_ffi_lua_code,
+			${module_c_name}_ffi_export, priv_table);
+	}
 #endif
 	return 1;
 }
@@ -954,9 +999,11 @@ LUA_NOBJ_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 ${module_init_src}
 
 #if ${module_c_name}_${object_name}_LUAJIT_FFI
-	nobj_try_loading_ffi(L, "${module_c_name}_${object_name}",
-		${module_c_name}_${object_name}_ffi_lua_code,
-		${module_c_name}_${object_name}_ffi_export, priv_table);
+	if(nobj_check_ffi_support(L)) {
+		nobj_try_loading_ffi(L, "${module_c_name}_${object_name}",
+			${module_c_name}_${object_name}_ffi_lua_code,
+			${module_c_name}_${object_name}_ffi_export, priv_table);
+	}
 #endif
 	return 1;
 }
@@ -973,11 +1020,7 @@ local tonumber = tonumber
 local tostring = tostring
 local rawset = rawset
 
--- try loading luajit's ffi
-local stat, ffi=pcall(require,"ffi")
-if not stat then
-	return
-end
+local ffi=require"ffi"
 
 local _M, _priv, udata_new = ...
 
