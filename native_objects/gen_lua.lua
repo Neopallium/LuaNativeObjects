@@ -502,10 +502,9 @@ static FUNC_UNUSED void * obj_simple_udata_luaoptional(lua_State *L, int _index,
 	return obj_simple_udata_luacheck(L, _index, type);
 }
 
-static FUNC_UNUSED void * obj_simple_udata_luadelete(lua_State *L, int _index, obj_type *type, int *flags) {
+static FUNC_UNUSED void * obj_simple_udata_luadelete(lua_State *L, int _index, obj_type *type) {
 	void *obj;
 	obj = obj_simple_udata_luacheck(L, _index, type);
-	*flags = OBJ_UDATA_FLAG_OWN;
 	/* clear the metatable to invalidate userdata. */
 	lua_pushnil(L);
 	lua_setmetatable(L, _index);
@@ -841,9 +840,9 @@ local obj_type_check_delete_push = {
 	*((${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name})))
 #define obj_type_${object_name}_optional(L, _index) \
 	*((${object_name} *)obj_simple_udata_luaoptional(L, _index, &(obj_type_${object_name})))
-#define obj_type_${object_name}_delete(L, _index, flags) \
-	*((${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags))
-#define obj_type_${object_name}_push(L, obj, flags) \
+#define obj_type_${object_name}_delete(L, _index) \
+	*((${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name})))
+#define obj_type_${object_name}_push(L, obj) \
 	obj_simple_udata_luapush(L, &(obj), sizeof(${object_name}), &(obj_type_${object_name}))
 ]],
 ['embed'] = [[
@@ -851,9 +850,9 @@ local obj_type_check_delete_push = {
 	(${object_name} *)obj_simple_udata_luacheck(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_optional(L, _index) \
 	(${object_name} *)obj_simple_udata_luaoptional(L, _index, &(obj_type_${object_name}))
-#define obj_type_${object_name}_delete(L, _index, flags) \
-	(${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}), flags)
-#define obj_type_${object_name}_push(L, obj, flags) \
+#define obj_type_${object_name}_delete(L, _index) \
+	(${object_name} *)obj_simple_udata_luadelete(L, _index, &(obj_type_${object_name}))
+#define obj_type_${object_name}_push(L, obj) \
 	obj_simple_udata_luapush(L, obj, sizeof(${object_name}), &(obj_type_${object_name}))
 ]],
 ['cast pointer'] = [[
@@ -1207,7 +1206,6 @@ end
 local function obj_simple_udata_luadelete(ud_obj, type_mt)
 	-- invalid userdata, by setting the metatable to nil.
 	d_setmetatable(ud_obj, nil)
-	return OBJ_UDATA_FLAG_OWN
 end
 
 local function obj_simple_udata_luapush(c_obj, size, type_mt)
@@ -1245,7 +1243,8 @@ end
 function obj_type_${object_name}_delete(ud_obj)
 	local c_obj = ${object_name}_objects[ud_obj]
 	${object_name}_objects[ud_obj] = nil
-	return c_obj, obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
+	obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
+	return c_obj
 end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
@@ -1277,7 +1276,8 @@ end
 function obj_type_${object_name}_delete(ud_obj)
 	local c_obj = ${object_name}_objects[ud_obj]
 	${object_name}_objects[ud_obj] = nil
-	return c_obj, obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
+	obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
+	return c_obj
 end
 
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
@@ -2333,23 +2333,35 @@ var_in = function(self, rec, parent)
 
 	local lua = rec.c_type_rec
 	if rec.is_this and parent.__gc then
-		-- add flags ${var_name_flags} variable
-		parent:add_rec_var(rec, rec.name .. '_flags')
-		local flags = '${' .. rec.name .. '_flags}'
-		-- for garbage collect method, check the ownership flag before freeing 'this' object.
-		parent:write_part("pre",
-			{
-			'  int ',flags,' = 0;\n',
-			'  ', rec.c_type, lua:_delete(rec, '&(' .. flags .. ')'),
-			})
-		parent:write_part("pre_src", {
-			'  if(!(',flags,' & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
-			})
-		parent:write_part("ffi_pre",
-			{
-			'  ', lua:_ffi_delete(rec, '&(' .. flags .. ')'),
-			'  if(band(',flags,',OBJ_UDATA_FLAG_OWN) == 0) then return end\n',
-			})
+		if rec.has_obj_flags then
+			-- add flags ${var_name_flags} variable
+			parent:add_rec_var(rec, rec.name .. '_flags')
+			local flags = '${' .. rec.name .. '_flags}'
+			-- for garbage collect method, check the ownership flag before freeing 'this' object.
+			parent:write_part("pre",
+				{
+				'  int ',flags,' = 0;\n',
+				'  ', rec.c_type, lua:_delete(rec, '&(' .. flags .. ')'),
+				})
+			parent:write_part("pre_src", {
+				'  if(!(',flags,' & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
+				})
+			parent:write_part("ffi_pre",
+				{
+				'  ', lua:_ffi_delete(rec, true),
+				'  if(band(',flags,',OBJ_UDATA_FLAG_OWN) == 0) then return end\n',
+				})
+		else
+			-- for garbage collect method, check the ownership flag before freeing 'this' object.
+			parent:write_part("pre",
+				{
+				'  ', rec.c_type, lua:_delete(rec, false),
+				})
+			parent:write_part("ffi_pre",
+				{
+				'  ', lua:_ffi_delete(rec, false),
+				})
+		end
 	elseif lua._rec_type ~= 'callback_func' then
 		if lua.lang_type == 'string' then
 			-- add length ${var_name_len} variable
@@ -2395,6 +2407,9 @@ var_out = function(self, rec, parent)
 		parent:write_part("ffi_pre",{
 			'  local ',flags,' = OBJ_UDATA_FLAG_OWN\n'
 		})
+	end
+	if not rec.has_obj_flags then
+		flags = false
 	end
 	-- register variable for code gen (i.e. so ${var_name} is replaced with true variable name).
 	parent:add_rec_var(rec)

@@ -194,13 +194,18 @@ process_records{
 			return ' ${'..var.name..'} = '..type_name..'_optional(L,${'..var.name..'::idx});\n'
 		end
 		rec._delete = function(self, var, flags)
-			assert(flags, 'need flags variable')
+			if not flags then
+				return ' ${'..var.name..'} = '..type_name..'_delete(L,${'..var.name..'::idx});\n'
+			end
 			return ' ${'..var.name..'} = '..type_name..'_delete(L,${'..var.name..'::idx},'..flags..');\n'
 		end
 		rec._to = rec._check
-		rec._push = function(self, var, own)
-			if own == nil then own = '0' end
-			return '  '..type_name..'_push(L, ${'..var.name..'}, '..own..');\n'
+		rec._push = function(self, var, flags)
+			if flags == false then
+				return '  '..type_name..'_push(L, ${'..var.name..'});\n'
+			end
+			if flags == nil then flags = '0' end
+			return '  '..type_name..'_push(L, ${'..var.name..'}, ' .. flags .. ');\n'
 		end
 		rec._ffi_check = function(self, var)
 			if var.is_this then
@@ -216,12 +221,18 @@ process_records{
 			local name = '${' .. var.name .. '}'
 			return '' .. name .. ' = '..name..' and '..type_name..'_check('..name..') or nil\n'
 		end
-		rec._ffi_delete = function(self, var)
+		rec._ffi_delete = function(self, var, has_flags)
+			if not has_flags then
+				return 'local ${'..var.name..'} = '..type_name..'_delete(self)\n'
+			end
 			return 'local ${'..var.name..'},${'..var.name..'_flags} = '..type_name..'_delete(self)\n'
 		end
-		rec._ffi_push = function(self, var, own)
-			if own == nil then own = '0' end
-			return '  '..type_name..'_push(${'..var.name..'}, '..own..')\n'
+		rec._ffi_push = function(self, var, flags)
+			if flags == false then
+				return '  '..type_name..'_push(${'..var.name..'})\n'
+			end
+			if flags == nil then flags = '0' end
+			return '  '..type_name..'_push(${'..var.name..'}, ' .. flags .. ')\n'
 		end
 		if rec.error_on_null then
 			rec._push_error = function(self, var)

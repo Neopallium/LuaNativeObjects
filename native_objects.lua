@@ -178,6 +178,7 @@ function object(name)
 	-- make it an object record.
 	userdata_type = rec.userdata_type or 'generic'
 	rec.userdata_type = userdata_type
+	rec.has_obj_flags = true
 	if userdata_type == 'generic' or userdata_type == 'embed' then
 		ctype(name .. " *", rec,"object")
 		rec.name = name
@@ -185,9 +186,13 @@ function object(name)
 		new_c_type(name, rec)
 		if userdata_type == 'embed' then
 			rec.no_weak_ref = true
+			rec.has_obj_flags = false
 		end
 	else
 		rec.no_weak_ref = true
+		if userdata_type == 'simple' then
+			rec.has_obj_flags = false
+		end
 		ctype(name, rec, "object")
 	end
 	-- check object type flags.
