@@ -203,6 +203,8 @@ typedef struct obj_udata {
 	uint32_t flags;  /**< lua_own:1bit */
 } obj_udata;
 
+int memcmp(const void *s1, const void *s2, size_t n);
+
 ]])
 
 -- cache mapping of cdata to userdata
@@ -391,10 +393,9 @@ end
 function ${object_name}_mt:__tostring()
 	return "${object_name}: " .. tostring(self._wrapped_val)
 end
---${object_name}_mt.__tostring = nil
 function ${object_name}_mt.__eq(val1, val2)
 	if not ffi.istype("${object_name}_t", val2) then return false end
-	return val1._wrapped_val
+	return (val1._wrapped_val == val2._wrapped_val)
 end
 
 end
@@ -424,8 +425,10 @@ end
 function ${object_name}_mt:__tostring()
 	return "${object_name}: " .. tostring(ffi.cast('void *', self))
 end
-${object_name}_mt.__tostring = nil
-${object_name}_mt.__eq = nil
+function ${object_name}_mt.__eq(val1, val2)
+	if not ffi.istype("${object_name}", val2) then return false end
+	return (C.memcmp(val1, val2, ${object_name}_sizeof) == 0)
+end
 
 end
 
