@@ -1231,29 +1231,39 @@ local obj_type_${object_name}_push
 
 do
 local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k",
-__index = function(objects, ud_obj)
-	return obj_simple_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
-end,
-})
-function obj_type_${object_name}_check(ud_obj)
-	return ${object_name}_objects[ud_obj]
+ffi_safe_cdef("${object_name}_simple_wrapper", [=[
+struct ${object_name}_t {
+	${object_name} _wrapped_val;
+};
+typedef struct ${object_name}_t ${object_name}_t;
+]=])
+local ${object_name}_sizeof = ffi.sizeof"${object_name}_t"
+
+function obj_type_${object_name}_check(wrap_obj)
+	return wrap_obj._wrapped_val
 end
 
-function obj_type_${object_name}_delete(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	${object_name}_objects[ud_obj] = nil
-	obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
-	return c_obj
+function obj_type_${object_name}_delete(wrap_obj)
+	local this = wrap_obj._wrapped_val
+	ffi.fill(wrap_obj, ${object_name}_sizeof, 0)
+	return this
 end
 
-local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-function obj_type_${object_name}_push(c_obj)
-	local tmp_obj = ffi.new("${object_name}[1]", c_obj)
-	local ud_obj, cdata = obj_simple_udata_luapush(tmp_obj, ${object_name}_sizeof, ${object_name}_mt)
-	${object_name}_objects[ud_obj] = ffi.new("${object_name} *", cdata)[0]
-	return ud_obj
+function obj_type_${object_name}_push(this)
+	local wrap_obj = ffi.new("${object_name}_t")
+	wrap_obj._wrapped_val = this
+	return wrap_obj
 end
+
+function ${object_name}_mt:__tostring()
+	return "${object_name}: " .. tostring(self._wrapped_val)
+end
+--${object_name}_mt.__tostring = nil
+function ${object_name}_mt.__eq(val1, val2)
+	if not ffi.istype("${object_name}_t", val2) then return false end
+	return val1._wrapped_val
+end
+
 end
 
 ]],
@@ -1264,28 +1274,26 @@ local obj_type_${object_name}_push
 
 do
 local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k",
-__index = function(objects, ud_obj)
-	return obj_embed_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
-end,
-})
-function obj_type_${object_name}_check(ud_obj)
-	return ${object_name}_objects[ud_obj]
-end
-
-function obj_type_${object_name}_delete(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	${object_name}_objects[ud_obj] = nil
-	obj_simple_udata_luadelete(ud_obj, ${object_name}_mt)
-	return c_obj
-end
-
 local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-function obj_type_${object_name}_push(c_obj)
-	local ud_obj, cdata = obj_simple_udata_luapush(c_obj, ${object_name}_sizeof, ${object_name}_mt)
-	${object_name}_objects[ud_obj] = cdata
-	return ud_obj
+
+function obj_type_${object_name}_check(obj)
+	return obj
 end
+
+function obj_type_${object_name}_delete(obj)
+	return obj
+end
+
+function obj_type_${object_name}_push(obj)
+	return obj
+end
+
+function ${object_name}_mt:__tostring()
+	return "${object_name}: " .. tostring(ffi.cast('void *', self))
+end
+${object_name}_mt.__tostring = nil
+${object_name}_mt.__eq = nil
+
 end
 
 ]],
@@ -1509,6 +1517,10 @@ local function reg_object_function(self, func, object)
 		if not self._cur_module.disable__gc and not object.disable__gc then
 			object:write_part('metas_regs',
 				{'  {"__gc", ', func.c_name, '},\n'})
+			if not func._is_hidden then
+				object:write_part('ffi_metas_regs',
+					{'_priv.${object_name}.__gc = ', ffi_table,'.${object_name}.', func.c_name, '\n'})
+			end
 		end
 		if func._is_hidden then
 			-- don't register '__gc' metamethods as a public object method.
@@ -1651,7 +1663,9 @@ c_module_end = function(self, rec, parent)
 	-- encode luajit ffi code
 	if rec.luajit_ffi then
 		local ffi_code = ffi_helper_code .. rec:dump_parts{
-			"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src", "ffi_extends" }
+			"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
+			"ffi_metas_regs", "ffi_extends"
+		}
 		rec:write_part("ffi_code",
 		{'\nstatic const char ${module_c_name}_ffi_lua_code[] = ', dump_lua_code_to_c_str(ffi_code)
 		})
@@ -1905,6 +1919,13 @@ object_end = function(self, rec, parent)
 			'obj_${object_name}_methods, obj_${object_name}_metas, obj_${object_name}_bases, ',
 			'obj_${object_name}_fields, obj_${object_name}_constants, ',bidirectional,'}'
 		}
+		if ud_type == 'simple' then
+			rec:write_part("ffi_src",{
+				'ffi.metatype("${object_name}_t", _priv.${object_name})\n'})
+		else
+			rec:write_part("ffi_src",{
+				'ffi.metatype("${object_name}", _priv.${object_name})\n'})
+		end
 	end
 	-- end object's FFI source
 	rec:write_part("ffi_src",
@@ -1926,7 +1947,9 @@ object_end = function(self, rec, parent)
 			'\n]]\n\n'
 			})
 			local ffi_code = ffi_helper_code .. rec:dump_parts{
-				"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src", "ffi_extends" }
+				"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
+				"ffi_metas_regs", "ffi_extends"
+			}
 			rec:write_part("ffi_code",
 			{'\nstatic const char ${module_c_name}_${object_name}_ffi_lua_code[] = ',
 				dump_lua_code_to_c_str(ffi_code)
@@ -1961,7 +1984,9 @@ object_end = function(self, rec, parent)
 		if self._cur_module.ffi_manual_bindings then return end
 
 		-- copy generated FFI bindings to parent
-		local ffi_parts = { "ffi_typedef", "ffi_cdef", "ffi_import", "ffi_src", "ffi_extends" }
+		local ffi_parts = { "ffi_typedef", "ffi_cdef", "ffi_import", "ffi_src",
+			"ffi_metas_regs", "ffi_extends"
+		}
 		rec:vars_parts(ffi_parts)
 		parent:copy_parts(rec, ffi_parts)
 	end
