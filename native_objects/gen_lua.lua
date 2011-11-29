@@ -743,7 +743,7 @@ local obj_type_check_delete_push = {
 #define obj_type_${object_name}_push(L, obj) \
 	obj_simple_udata_luapush(L, obj, sizeof(${object_name}), &(obj_type_${object_name}))
 ]],
-['cast pointer'] = [[
+['object id'] = [[
 #define obj_type_${object_name}_check(L, _index) \
 	(${object_name})(uintptr_t)obj_udata_luacheck(L, _index, &(obj_type_${object_name}))
 #define obj_type_${object_name}_optional(L, _index) \
@@ -779,7 +779,7 @@ local obj_type_check_delete_push = {
 local obj_type_equal_tostring = {
 ['simple'] = 'obj_simple_udata_default',
 ['embed'] = 'obj_simple_udata_default',
-['cast pointer'] = 'obj_udata_default',
+['object id'] = 'obj_udata_default',
 ['generic'] = 'obj_udata_default',
 ['generic_weak'] = 'obj_udata_default',
 }

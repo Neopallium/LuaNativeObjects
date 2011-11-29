@@ -433,7 +433,7 @@ end
 end
 
 ]],
-['cast pointer'] = [[
+['object id'] = [[
 local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
@@ -509,30 +509,61 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k",
-__index = function(objects, ud_obj)
-	return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
-end,
-})
-function obj_type_${object_name}_check(ud_obj)
-	return ${object_name}_objects[ud_obj]
-end
+	local ${object_name}_mt = _priv.${object_name}
+	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
+		struct ${object_name}_t {
+			${object_name} *ptr;
+			uint32_t       flags;
+		};
+		typedef struct ${object_name}_t ${object_name}_t;
+	]=])
+	local ${object_name}_objects = setmetatable({}, { __mode = "k",
+	__index = function(objects, ud_obj)
+		return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
+	end,
+	})
+	function obj_type_${object_name}_check(obj)
+		if ffi.istype("${object_name}_t", obj) then return obj.ptr end
+		return ${object_name}_objects[obj]
+	end
 
-function obj_type_${object_name}_delete(ud_obj)
-	${object_name}_objects[ud_obj] = nil
-	return obj_udata_luadelete_weak(ud_obj, ${object_name}_mt)
-end
+	function obj_type_${object_name}_delete(obj)
+		if ffi.istype("${object_name}_t", obj) then
+			local ptr, flags = obj.ptr, obj.flags
+			obj.ptr = nil
+			obj.flags = 0
+			return ptr, flags
+		end
+		${object_name}_objects[obj] = nil
+		return obj_udata_luadelete_weak(obj, ${object_name}_mt)
+	end
 
-local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
-function obj_type_${object_name}_push(c_obj, flags)
-	local ud_obj = obj_udata_luapush_weak(c_obj, ${object_name}_mt, ${object_name}_type, flags)
-	${object_name}_objects[ud_obj] = c_obj
-	return ud_obj
-end
+	function obj_type_${object_name}_push(ptr, flags)
+		local obj = ffi.new("${object_name}_t")
+		obj.ptr = ptr
+		obj.flags = flags or 0
+		return obj
+	end
+
+	function ${object_name}_mt:__tostring()
+		return "${object_name}: " .. tostring(self.ptr)
+	end
+
+	function ${object_name}_mt.__eq(val1, val2)
+		if not ffi.istype("${object_name}_t", val2) then return false end
+		return (val1.ptr == val2.ptr)
+	end
 end
 
 ]],
+}
+
+local ffi_obj_metatype = {
+['simple'] = "${object_name}_t",
+['embed'] = "${object_name}",
+['object id'] = "${object_name}_t",
+['generic'] = "${object_name}_t",
+['generic_weak'] = "${object_name}_t",
 }
 
 -- module template
@@ -785,12 +816,10 @@ object_end = function(self, rec, parent)
 	end
 	-- register metatable for FFI cdata type.
 	if not rec.is_package then
-		if ud_type == 'simple' then
+		local c_metatype = ffi_obj_metatype[ud_type]
+		if c_metatype then
 			rec:write_part("ffi_src",{
-				'ffi.metatype("${object_name}_t", _priv.${object_name})\n'})
-		else
-			rec:write_part("ffi_src",{
-				'ffi.metatype("${object_name}", _priv.${object_name})\n'})
+				'ffi.metatype("',c_metatype,'", _priv.${object_name})\n'})
 		end
 	end
 	-- end object's FFI source
