@@ -379,6 +379,18 @@ local function obj_simple_udata_luapush(c_obj, size, type_mt)
 	return ud_obj, cdata
 end
 
+local function register_default_constructor(_pub, obj_name, constructor)
+	local pub_constructor = _pub[obj_name]
+	if type(pub_constructor) == 'table' then
+		d_setmetatable(pub_constructor, { __call = function(t,...)
+			return constructor(...)
+		end,
+		__metatable = false,
+		})
+	else
+		_pub[obj_name] = constructor
+	end
+end
 ]===]
 
 -- templates for typed *_check/*_delete/*_push functions
@@ -997,6 +1009,8 @@ c_function = function(self, rec, parent)
 	end
 	-- register method/function with object.
 	local ffi_table, name = reg_object_function(self, rec, parent)
+	rec.ffi_table = ffi_table
+	rec.ffi_reg_name = name
 
 	-- generate FFI function
 	rec:write_part("ffi_pre",
@@ -1019,6 +1033,13 @@ c_function_end = function(self, rec, parent)
 	rec:write_part("ffi_post",
 		{'  return ', ffi_return,'\n',
 		 'end\n\n'})
+
+	-- check if this is the default constructor.
+	if rec.is_default_constructor then
+		rec:write_part("ffi_post",
+			{'register_default_constructor(_pub,"${object_name}",',
+			rec.ffi_table,'.${object_name}.', rec.ffi_reg_name ,')\n'})
+	end
 
 	rec:vars_parts(ffi_parts)
 	-- append FFI-based function to parent's FFI source

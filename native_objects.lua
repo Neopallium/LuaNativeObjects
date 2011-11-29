@@ -991,6 +991,11 @@ local function process_module_file(file)
 				var = var_in{ "<any>", "this", is_this = true }
 			elseif rec.is_constructor then
 				var = var_out{ parent.c_type, "this", is_this = true }
+				-- make the first constructor the default.
+				if not parent.default_constructor then
+					parent.default_constructor = rec
+					rec.is_default_constructor = true
+				end
 			else
 				var = var_in{ parent.c_type, "this", is_this = true }
 			end
