@@ -697,12 +697,6 @@ local function reg_object_function(self, func, object)
 		if func._is_hidden then
 			-- don't register '__gc' metamethods as a public object method.
 			return '_priv', '__gc'
-		else
-			-- add '__gc' method.
-			if not self._cur_module.disable__gc and not object.disable__gc then
-				object:write_part('ffi_metas_regs',
-					{'_priv.${object_name}.__gc = ', ffi_table,'.${object_name}.', func.c_name, '\n'})
-			end
 		end
 	elseif func.is_constructor then
 		ffi_table = '_pub'
@@ -1006,6 +1000,11 @@ c_function = function(self, rec, parent)
 	rec:add_var('function_name', rec.name)
 	if rec.is_destructor then
 		rec.__gc = true -- mark as '__gc' method
+		-- check if this is the first destructor.
+		if not parent.has_default_destructor then
+			parent.has_default_destructor = rc
+			rec.is__default_destructor = true
+		end
 	end
 	-- register method/function with object.
 	local ffi_table, name = reg_object_function(self, rec, parent)
@@ -1039,6 +1038,11 @@ c_function_end = function(self, rec, parent)
 		rec:write_part("ffi_post",
 			{'register_default_constructor(_pub,"${object_name}",',
 			rec.ffi_table,'.${object_name}.', rec.ffi_reg_name ,')\n'})
+	end
+	if rec.is__default_destructor and not rec._is_hidden and
+			not self._cur_module.disable__gc and not parent.disable__gc then
+		rec:write_part('ffi_post',
+			{'_priv.${object_name}.__gc = ', rec.ffi_table,'.${object_name}.', rec.name, '\n'})
 	end
 
 	rec:vars_parts(ffi_parts)
