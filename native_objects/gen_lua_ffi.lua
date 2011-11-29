@@ -146,13 +146,37 @@ local submodule_init_src = [[
 -- FFI templates
 --
 local ffi_helper_code = [===[
+local ffi=require"ffi"
+local function ffi_safe_load(name, global)
+	local stat, C = pcall(ffi.load, name, global)
+	if not stat then return nil, C end
+	return C
+end
+
 local error = error
 local type = type
 local tonumber = tonumber
 local tostring = tostring
 local rawset = rawset
+local p_config = package.config
+local p_cpath = package.cpath
 
-local ffi=require"ffi"
+local function ffi_load_cmodule(name)
+	local dir_sep = p_config:sub(1,1)
+	local path_sep = p_config:sub(3,3)
+	local path_mark = p_config:sub(5,5)
+	local path_match = "([^" .. path_sep .. "]*)" .. path_sep
+	-- convert dotted name to directory path.
+	name = name:gsub('%.', dir_sep)
+	-- try each path in search path.
+	for path in p_cpath:gmatch(path_match) do
+		local fname = path:gsub(path_mark, name)
+		local C, err = ffi_safe_load(fname)
+		-- return opened library
+		if C then return C end
+	end
+	return nil, "Failed to find: " .. name
+end
 
 local _M, _priv, udata_new = ...
 
@@ -672,6 +696,14 @@ c_module = function(self, rec, parent)
 	if rec.hide_meta_info == nil then rec.hide_meta_info = true end
 	-- luajit_ffi?
 	rec:insert_record(define("LUAJIT_FFI")(rec.luajit_ffi and 1 or 0), 1)
+	-- luajit_ffi_load_cmodule?
+	if rec.luajit_ffi_load_cmodule then
+		rec:write_part("ffi_typedef", [[
+-- Load C module
+local C = assert(ffi_load_cmodule("${module_c_name}"))
+
+]])
+	end
 	-- where we want the module function registered.
 	rec.functions_regs = 'function_regs'
 	rec.methods_regs = 'function_regs'
