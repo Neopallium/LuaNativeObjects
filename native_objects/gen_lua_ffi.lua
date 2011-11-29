@@ -389,39 +389,39 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-local ${object_name}_mt = _priv.${object_name}
-ffi_safe_cdef("${object_name}_simple_wrapper", [=[
-struct ${object_name}_t {
-	${object_name} _wrapped_val;
-};
-typedef struct ${object_name}_t ${object_name}_t;
-]=])
-local ${object_name}_sizeof = ffi.sizeof"${object_name}_t"
+	local ${object_name}_mt = _priv.${object_name}
+	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
+		struct ${object_name}_t {
+			${object_name} _wrapped_val;
+		};
+		typedef struct ${object_name}_t ${object_name}_t;
+	]=])
+	local ${object_name}_sizeof = ffi.sizeof"${object_name}_t"
 
-function obj_type_${object_name}_check(wrap_obj)
-	return wrap_obj._wrapped_val
-end
+	function obj_type_${object_name}_check(wrap_obj)
+		return wrap_obj._wrapped_val
+	end
 
-function obj_type_${object_name}_delete(wrap_obj)
-	local this = wrap_obj._wrapped_val
-	ffi.fill(wrap_obj, ${object_name}_sizeof, 0)
-	return this
-end
+	function obj_type_${object_name}_delete(wrap_obj)
+		local this = wrap_obj._wrapped_val
+		ffi.fill(wrap_obj, ${object_name}_sizeof, 0)
+		return this
+	end
 
-function obj_type_${object_name}_push(this)
-	local wrap_obj = ffi.new("${object_name}_t")
-	wrap_obj._wrapped_val = this
-	return wrap_obj
-end
+	function obj_type_${object_name}_push(this)
+		local wrap_obj = ffi.new("${object_name}_t")
+		wrap_obj._wrapped_val = this
+		return wrap_obj
+	end
 
-function ${object_name}_mt:__tostring()
-	return "${object_name}: " .. tostring(self._wrapped_val)
-end
-function ${object_name}_mt.__eq(val1, val2)
-	if not ffi.istype("${object_name}_t", val2) then return false end
-	return (val1._wrapped_val == val2._wrapped_val)
-end
+	function ${object_name}_mt:__tostring()
+		return "${object_name}: " .. tostring(self._wrapped_val)
+	end
 
+	function ${object_name}_mt.__eq(val1, val2)
+		if not ffi.istype("${object_name}_t", val2) then return false end
+		return (val1._wrapped_val == val2._wrapped_val)
+	end
 end
 
 ]],
@@ -431,29 +431,29 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_sizeof = ffi.sizeof"${object_name}"
+	local ${object_name}_mt = _priv.${object_name}
+	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 
-function obj_type_${object_name}_check(obj)
-	return obj
-end
+	function obj_type_${object_name}_check(obj)
+		return obj
+	end
 
-function obj_type_${object_name}_delete(obj)
-	return obj
-end
+	function obj_type_${object_name}_delete(obj)
+		return obj
+	end
 
-function obj_type_${object_name}_push(obj)
-	return obj
-end
+	function obj_type_${object_name}_push(obj)
+		return obj
+	end
 
-function ${object_name}_mt:__tostring()
-	return "${object_name}: " .. tostring(ffi.cast('void *', self))
-end
-function ${object_name}_mt.__eq(val1, val2)
-	if not ffi.istype("${object_name}", val2) then return false end
-	return (C.memcmp(val1, val2, ${object_name}_sizeof) == 0)
-end
+	function ${object_name}_mt:__tostring()
+		return "${object_name}: " .. tostring(ffi.cast('void *', self))
+	end
 
+	function ${object_name}_mt.__eq(val1, val2)
+		if not ffi.istype("${object_name}", val2) then return false end
+		return (C.memcmp(val1, val2, ${object_name}_sizeof) == 0)
+	end
 end
 
 ]],
@@ -463,37 +463,46 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k",
-__index = function(objects, ud_obj)
-	-- cdata object not in cache
-	local c_obj = tonumber(ffi.cast('uintptr_t', obj_udata_luacheck(ud_obj, ${object_name}_mt)))
-	c_obj = ffi.cast("${object_name} *", c_obj) -- cast from 'void *'
-	rawset(objects, ud_obj, c_obj)
-	return c_obj
-end,
-})
-function obj_type_${object_name}_check(ud_obj)
-	return ${object_name}_objects[ud_obj]
-end
-
-function obj_type_${object_name}_delete(ud_obj)
-	local c_obj = ${object_name}_objects[ud_obj]
-	${object_name}_objects[ud_obj] = nil
-	local c_ptr, flags = obj_udata_luadelete(ud_obj, ${object_name}_mt)
-	if c_obj == nil then
-		c_obj = tonumber(ffi.cast('uintptr_t', c_ptr))
+	local ${object_name}_mt = _priv.${object_name}
+	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
+		struct ${object_name}_t {
+			${object_name} val;
+			uint32_t       flags;
+		};
+		typedef struct ${object_name}_t ${object_name}_t;
+	]=])
+	function obj_type_${object_name}_check(obj)
+		if ffi.istype("${object_name}_t", obj) then return obj.val end
+		local val = obj_udata_luacheck(obj, ${object_name}_mt)
+		return tonumber(ffi.cast('uintptr_t', val))
 	end
-	return c_obj, flags
-end
 
-local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
-function obj_type_${object_name}_push(c_obj, flags)
-	local ud_obj = obj_udata_luapush(ffi.cast('void *', c_obj), ${object_name}_mt,
-		${object_name}_type, flags)
-	${object_name}_objects[ud_obj] = c_obj
-	return ud_obj
-end
+	function obj_type_${object_name}_delete(obj)
+		if ffi.istype("${object_name}_t", obj) then
+			local val, flags = obj.val, obj.flags
+			obj.val = 0
+			obj.flags = 0
+			return val, flags
+		end
+		local val, flags = obj_udata_luadelete(obj, ${object_name}_mt)
+		return tonumber(ffi.cast('uintptr_t', val)), flags
+	end
+
+	function obj_type_${object_name}_push(val, flags)
+		local obj = ffi.new("${object_name}_t")
+		obj.val = val
+		obj.flags = flags or 0
+		return obj
+	end
+
+	function ${object_name}_mt:__tostring()
+		return "${object_name}: " .. tostring(self.val)
+	end
+
+	function ${object_name}_mt.__eq(val1, val2)
+		if not ffi.istype("${object_name}_t", val2) then return false end
+		return (val1.val == val2.val)
+	end
 end
 
 ]],
@@ -503,27 +512,50 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-local ${object_name}_mt = _priv.${object_name}
-local ${object_name}_objects = setmetatable({}, { __mode = "k",
-__index = function(objects, ud_obj)
-	return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
-end,
-})
-function obj_type_${object_name}_check(ud_obj)
-	return ${object_name}_objects[ud_obj]
-end
+	local ${object_name}_mt = _priv.${object_name}
+	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
+		struct ${object_name}_t {
+			${object_name} *ptr;
+			uint32_t       flags;
+		};
+		typedef struct ${object_name}_t ${object_name}_t;
+	]=])
+	local ${object_name}_objects = setmetatable({}, { __mode = "k",
+	__index = function(objects, ud_obj)
+		return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
+	end,
+	})
+	function obj_type_${object_name}_check(obj)
+		if ffi.istype("${object_name}_t", obj) then return obj.ptr end
+		return ${object_name}_objects[obj]
+	end
 
-function obj_type_${object_name}_delete(ud_obj)
-	${object_name}_objects[ud_obj] = nil
-	return obj_udata_luadelete(ud_obj, ${object_name}_mt)
-end
+	function obj_type_${object_name}_delete(obj)
+		if ffi.istype("${object_name}_t", obj) then
+			local ptr, flags = obj.ptr, obj.flags
+			obj.ptr = nil
+			obj.flags = 0
+			return ptr, flags
+		end
+		${object_name}_objects[obj] = nil
+		return obj_udata_luadelete(obj, ${object_name}_mt)
+	end
 
-local ${object_name}_type = ffi.cast("obj_type *", ${object_name}_mt[".type"])
-function obj_type_${object_name}_push(c_obj, flags)
-	local ud_obj = obj_udata_luapush(c_obj, ${object_name}_mt, ${object_name}_type, flags)
-	${object_name}_objects[ud_obj] = c_obj
-	return ud_obj
-end
+	function obj_type_${object_name}_push(ptr, flags)
+		local obj = ffi.new("${object_name}_t")
+		obj.ptr = ptr
+		obj.flags = flags or 0
+		return obj
+	end
+
+	function ${object_name}_mt:__tostring()
+		return "${object_name}: " .. tostring(self.ptr)
+	end
+
+	function ${object_name}_mt.__eq(val1, val2)
+		if not ffi.istype("${object_name}_t", val2) then return false end
+		return (val1.ptr == val2.ptr)
+	end
 end
 
 ]],
