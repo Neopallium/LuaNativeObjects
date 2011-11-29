@@ -1652,13 +1652,17 @@ var_out = function(self, rec, parent)
 	end
 	local flags = false
 	local lua = rec.c_type_rec
-	if lua.has_obj_flags and (rec.is_this or rec.own) then
-		-- add flags ${var_name_flags} variable
-		parent:add_rec_var(rec, rec.name .. '_flags')
-		flags = '${' .. rec.name .. '_flags}'
-		parent:write_part("pre",{
-			'  int ',flags,' = OBJ_UDATA_FLAG_OWN;\n'
-		})
+	if lua.has_obj_flags then
+		if (rec.is_this or rec.own) then
+			-- add flags ${var_name_flags} variable
+			parent:add_rec_var(rec, rec.name .. '_flags')
+			flags = '${' .. rec.name .. '_flags}'
+			parent:write_part("pre",{
+				'  int ',flags,' = OBJ_UDATA_FLAG_OWN;\n'
+			})
+		else
+			flags = "0"
+		end
 	end
 	-- register variable for code gen (i.e. so ${var_name} is replaced with true variable name).
 	parent:add_rec_var(rec)
