@@ -985,7 +985,7 @@ local function process_module_file(file)
 	--
 	process_records{
 	c_function = function(self, rec, parent)
-		if rec._is_method then
+		if rec._is_method and not rec.override_this then
 			local var
 			if parent.is_meta then
 				var = var_in{ "<any>", "this", is_this = true }
