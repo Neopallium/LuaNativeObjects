@@ -150,7 +150,11 @@ local ffi=require"ffi"
 local function ffi_safe_load(name, global)
 	local stat, C = pcall(ffi.load, name, global)
 	if not stat then return nil, C end
+	if global then return ffi.C end
 	return C
+end
+local function ffi_load(name, global)
+	return assert(ffi_safe_load(name, global))
 end
 
 local error = error
@@ -161,7 +165,7 @@ local rawset = rawset
 local p_config = package.config
 local p_cpath = package.cpath
 
-local function ffi_load_cmodule(name)
+local function ffi_load_cmodule(name, global)
 	local dir_sep = p_config:sub(1,1)
 	local path_sep = p_config:sub(3,3)
 	local path_mark = p_config:sub(5,5)
@@ -171,11 +175,11 @@ local function ffi_load_cmodule(name)
 	-- try each path in search path.
 	for path in p_cpath:gmatch(path_match) do
 		local fname = path:gsub(path_mark, name)
-		local C, err = ffi_safe_load(fname)
+		local C, err = ffi_safe_load(fname, global)
 		-- return opened library
 		if C then return C end
 	end
-	return nil, "Failed to find: " .. name
+	error("Failed to find: " .. name)
 end
 
 local _M, _priv, udata_new = ...
@@ -774,11 +778,14 @@ c_module = function(self, rec, parent)
 	rec:insert_record(define("LUAJIT_FFI")(rec.luajit_ffi and 1 or 0), 1)
 	-- luajit_ffi_load_cmodule?
 	if rec.luajit_ffi_load_cmodule then
-		rec:write_part("ffi_typedef", [[
--- Load C module
-local C = assert(ffi_load_cmodule("${module_c_name}"))
+		local global = 'false'
+		if rec.luajit_ffi_load_cmodule == 'global' then
+			global = 'true'
+		end
+		rec:write_part("ffi_typedef", {[[
+local C = ffi_load_cmodule("${module_c_name}", ]], global ,[[)
 
-]])
+]]})
 	end
 	-- where we want the module function registered.
 	rec.functions_regs = 'function_regs'
