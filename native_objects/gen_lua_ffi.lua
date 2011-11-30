@@ -405,9 +405,10 @@ local function register_default_constructor(_pub, obj_name, constructor)
 end
 ]===]
 
--- templates for typed *_delete/*_push functions
-local ffi_obj_type_delete_push = {
+-- templates for typed *_check/*_delete/*_push functions
+local ffi_obj_type_check_delete_push = {
 ['simple'] = [[
+local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -421,6 +422,10 @@ do
 		};
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
+
+	function obj_type_${object_name}_check(obj)
+		return obj._wrapped_val
+	end
 
 	function obj_type_${object_name}_delete(obj)
 		local id = obj_to_id(obj)
@@ -452,12 +457,17 @@ end
 
 ]],
 ['simple ptr'] = [[
+local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
 	local obj_mt = _priv.${object_name}
 	local obj_flags = {}
+
+	function obj_type_${object_name}_check(ptr)
+		return ptr
+	end
 
 	function obj_type_${object_name}_delete(ptr)
 		local id = obj_ptr_to_id(ptr)
@@ -491,12 +501,17 @@ end
 
 ]],
 ['embed'] = [[
+local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
 	local obj_mt = _priv.${object_name}
 	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
+
+	function obj_type_${object_name}_check(obj)
+		return obj
+	end
 
 	function obj_type_${object_name}_delete(obj)
 		return obj
@@ -519,6 +534,7 @@ end
 
 ]],
 ['object id'] = [[
+local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
@@ -532,6 +548,10 @@ do
 		};
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
+
+	function obj_type_${object_name}_check(obj)
+		return obj._wrapped_val
+	end
 
 	function obj_type_${object_name}_delete(obj)
 		local id = obj_ptr_to_id(obj)
@@ -563,12 +583,17 @@ end
 
 ]],
 ['generic'] = [[
+local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
 	local obj_mt = _priv.${object_name}
 	local obj_flags = {}
+
+	function obj_type_${object_name}_check(ptr)
+		return ptr
+	end
 
 	function obj_type_${object_name}_delete(ptr)
 		local id = obj_ptr_to_id(ptr)
@@ -597,12 +622,18 @@ end
 
 ]],
 ['generic_weak'] = [[
+local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
 	local obj_mt = _priv.${object_name}
+	local objects = setmetatable({}, {__mode = "v"})
 	local obj_flags = {}
+
+	function obj_type_${object_name}_check(ptr)
+		return ptr
+	end
 
 	function obj_type_${object_name}_delete(ptr)
 		local id = obj_ptr_to_id(ptr)
@@ -614,11 +645,15 @@ do
 	end
 
 	function obj_type_${object_name}_push(ptr, flags)
+		local id = obj_ptr_to_id(ptr)
+		-- check weak refs
+		local old_ptr = objects[id]
+		if old_ptr then return old_ptr end
 		if flags then
-			local id = obj_ptr_to_id(ptr)
 			obj_flags[id] = flags
 			ffi.gc(ptr, obj_mt.__gc)
 		end
+		objects[id] = ptr
 		return ptr
 	end
 
@@ -919,9 +954,9 @@ object_end = function(self, rec, parent)
 	end
 	-- register metatable for FFI cdata type.
 	if not rec.is_package then
-		-- create FFI delete/push functions
+		-- create FFI check/delete/push functions
 		rec:write_part("ffi_obj_type", {
-			rec.ffi_custom_delete_push or ffi_obj_type_delete_push[rec.ud_type],
+			rec.ffi_custom_delete_push or ffi_obj_type_check_delete_push[rec.ud_type],
 			'\n'
 		})
 		local c_metatype = ffi_obj_metatype[rec.ud_type]
