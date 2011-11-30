@@ -179,18 +179,18 @@ function object(name)
 	userdata_type = rec.userdata_type or 'generic'
 	rec.userdata_type = userdata_type
 	rec.has_obj_flags = true
-	if userdata_type == 'generic' or userdata_type == 'embed' then
+	if userdata_type == 'generic' or userdata_type == 'embed' or userdata_type == 'simple ptr' then
 		ctype(name .. " *", rec,"object")
 		rec.name = name
 		-- map the c_type to this record
 		new_c_type(name, rec)
-		if userdata_type == 'embed' then
+		if userdata_type == 'embed' or userdata_type == 'simple ptr' then
 			rec.no_weak_ref = true
 			rec.has_obj_flags = false
 		end
 	else
 		rec.no_weak_ref = true
-		if userdata_type == 'simple' then
+		if userdata_type == 'simple' or userdata_type == 'simple ptr' then
 			rec.has_obj_flags = false
 		end
 		ctype(name, rec, "object")

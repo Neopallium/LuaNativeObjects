@@ -379,6 +379,14 @@ local function obj_simple_udata_luapush(c_obj, size, type_mt)
 	return ud_obj, cdata
 end
 
+local function obj_ptr_to_id(ptr)
+	return tonumber(ffi.cast('uintptr_t', ptr))
+end
+
+local function obj_to_id(ptr)
+	return tonumber(ffi.cast('uintptr_t', ffi.cast('void *', ptr)))
+end
+
 local function register_default_constructor(_pub, obj_name, constructor)
 	local pub_constructor = _pub[obj_name]
 	if type(pub_constructor) == 'table' then
@@ -393,62 +401,98 @@ local function register_default_constructor(_pub, obj_name, constructor)
 end
 ]===]
 
--- templates for typed *_check/*_delete/*_push functions
-local ffi_obj_type_check_delete_push = {
+-- templates for typed *_delete/*_push functions
+local ffi_obj_type_delete_push = {
 ['simple'] = [[
-local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local ${object_name}_mt = _priv.${object_name}
+	local obj_mt = _priv.${object_name}
+	local obj_flags = {}
+
 	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
 		struct ${object_name}_t {
-			${object_name} _wrapped_val;
+			const ${object_name} _wrapped_val;
 		};
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
-	local ${object_name}_sizeof = ffi.sizeof"${object_name}_t"
 
-	function obj_type_${object_name}_check(wrap_obj)
-		return wrap_obj._wrapped_val
+	function obj_type_${object_name}_delete(obj)
+		local id = obj_to_id(obj)
+		local valid = obj_flags[id]
+		if not valid then return nil end
+		local val = obj._wrapped_val
+		obj_flags[id] = nil
+		return val
 	end
 
-	function obj_type_${object_name}_delete(wrap_obj)
-		local this = wrap_obj._wrapped_val
-		ffi.fill(wrap_obj, ${object_name}_sizeof, 0)
-		return this
+	local new_obj = ffi.typeof("${object_name}_t")
+	function obj_type_${object_name}_push(val)
+		local obj = new_obj(val)
+		local id = obj_to_id(obj)
+		obj_flags[id] = true
+		return obj
 	end
 
-	function obj_type_${object_name}_push(this)
-		local wrap_obj = ffi.new("${object_name}_t")
-		wrap_obj._wrapped_val = this
-		return wrap_obj
-	end
-
-	function ${object_name}_mt:__tostring()
+	function obj_mt:__tostring()
 		return "${object_name}: " .. tostring(self._wrapped_val)
 	end
 
-	function ${object_name}_mt.__eq(val1, val2)
+	function obj_mt.__eq(val1, val2)
 		if not ffi.istype("${object_name}_t", val2) then return false end
 		return (val1._wrapped_val == val2._wrapped_val)
 	end
+
+end
+
+]],
+['simple ptr'] = [[
+local obj_type_${object_name}_delete
+local obj_type_${object_name}_push
+
+do
+	local obj_mt = _priv.${object_name}
+	local obj_flags = {}
+
+	function obj_type_${object_name}_delete(ptr)
+		local id = obj_ptr_to_id(ptr)
+		local flags = obj_flags[id]
+		if not flags then return ptr end
+		ffi.gc(ptr, nil)
+		obj_flags[id] = nil
+		return ptr
+	end
+
+	if obj_mt.__gc then
+		-- has __gc metamethod
+		function obj_type_${object_name}_push(ptr)
+			local id = obj_ptr_to_id(ptr)
+			obj_flags[id] = true
+			return ffi.gc(ptr, obj_mt.__gc)
+		end
+	else
+		-- no __gc metamethod
+		function obj_type_${object_name}_push(ptr)
+			return ptr
+		end
+	end
+
+	function obj_mt:__tostring()
+		local id = obj_ptr_to_id(self)
+		return "${object_name}: " .. tostring(id)
+	end
+
 end
 
 ]],
 ['embed'] = [[
-local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local ${object_name}_mt = _priv.${object_name}
+	local obj_mt = _priv.${object_name}
 	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-
-	function obj_type_${object_name}_check(obj)
-		return obj
-	end
 
 	function obj_type_${object_name}_delete(obj)
 		return obj
@@ -458,169 +502,127 @@ do
 		return obj
 	end
 
-	function ${object_name}_mt:__tostring()
+	function obj_mt:__tostring()
 		return "${object_name}: " .. tostring(ffi.cast('void *', self))
 	end
 
-	function ${object_name}_mt.__eq(val1, val2)
+	function obj_mt.__eq(val1, val2)
 		if not ffi.istype("${object_name}", val2) then return false end
+		assert(ffi.istype("${object_name}", val1), "expected ${object_name}")
 		return (C.memcmp(val1, val2, ${object_name}_sizeof) == 0)
 	end
 end
 
 ]],
 ['object id'] = [[
-local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local ${object_name}_mt = _priv.${object_name}
+	local obj_mt = _priv.${object_name}
+	local obj_flags = {}
+
 	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
 		struct ${object_name}_t {
-			${object_name} val;
-			uint32_t       flags;
+			const ${object_name} _wrapped_val;
 		};
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
-	function obj_type_${object_name}_check(obj)
-		if ffi.istype("${object_name}_t", obj) then return obj.val end
-		local val = obj_udata_luacheck(obj, ${object_name}_mt)
-		return tonumber(ffi.cast('uintptr_t', val))
-	end
 
 	function obj_type_${object_name}_delete(obj)
-		if ffi.istype("${object_name}_t", obj) then
-			local val, flags = obj.val, obj.flags
-			obj.val = 0
-			obj.flags = 0
-			return val, flags
-		end
-		local val, flags = obj_udata_luadelete(obj, ${object_name}_mt)
-		return tonumber(ffi.cast('uintptr_t', val)), flags
+		local id = obj_ptr_to_id(obj)
+		local flags = obj_flags[id]
+		local val = obj._wrapped_val
+		if not flags then return val, 0 end
+		obj_flags[id] = nil
+		return val, flags
 	end
 
+	local new_obj = ffi.typeof("${object_name}_t")
 	function obj_type_${object_name}_push(val, flags)
-		local obj = ffi.new("${object_name}_t")
-		obj.val = val
-		obj.flags = flags or 0
+		local obj = new_obj(val)
+		local id = obj_ptr_to_id(obj)
+		obj_flags[id] = flags
 		return obj
 	end
 
-	function ${object_name}_mt:__tostring()
-		return "${object_name}: " .. tostring(self.val)
+	function obj_mt:__tostring()
+		return "${object_name}: " .. tostring(self._wrapped_val)
 	end
 
-	function ${object_name}_mt.__eq(val1, val2)
+	function obj_mt.__eq(val1, val2)
 		if not ffi.istype("${object_name}_t", val2) then return false end
-		return (val1.val == val2.val)
+		return (val1._wrapped_val == val2._wrapped_val)
 	end
+
 end
 
 ]],
 ['generic'] = [[
-local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local ${object_name}_mt = _priv.${object_name}
-	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
-		struct ${object_name}_t {
-			${object_name} *ptr;
-			uint32_t       flags;
-		};
-		typedef struct ${object_name}_t ${object_name}_t;
-	]=])
-	local ${object_name}_objects = setmetatable({}, { __mode = "k",
-	__index = function(objects, ud_obj)
-		return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
-	end,
-	})
-	function obj_type_${object_name}_check(obj)
-		if ffi.istype("${object_name}_t", obj) then return obj.ptr end
-		return ${object_name}_objects[obj]
-	end
+	local obj_mt = _priv.${object_name}
+	local obj_flags = {}
 
-	function obj_type_${object_name}_delete(obj)
-		if ffi.istype("${object_name}_t", obj) then
-			local ptr, flags = obj.ptr, obj.flags
-			obj.ptr = nil
-			obj.flags = 0
-			return ptr, flags
-		end
-		${object_name}_objects[obj] = nil
-		return obj_udata_luadelete(obj, ${object_name}_mt)
+	function obj_type_${object_name}_delete(ptr)
+		local id = obj_ptr_to_id(ptr)
+		local flags = obj_flags[id]
+		if not flags then return ptr, 0 end
+		ffi.gc(ptr, nil)
+		obj_flags[id] = nil
+		return ptr, flags
 	end
 
 	function obj_type_${object_name}_push(ptr, flags)
-		local obj = ffi.new("${object_name}_t")
-		obj.ptr = ptr
-		obj.flags = flags or 0
-		return obj
+		if flags then
+			local id = obj_ptr_to_id(ptr)
+			obj_flags[id] = flags
+			ffi.gc(ptr, obj_mt.__gc)
+		end
+		return ptr
 	end
 
-	function ${object_name}_mt:__tostring()
-		return "${object_name}: " .. tostring(self.ptr)
+	function obj_mt:__tostring()
+		local id = obj_ptr_to_id(self)
+		return "${object_name}: " .. tostring(id)
 	end
 
-	function ${object_name}_mt.__eq(val1, val2)
-		if not ffi.istype("${object_name}_t", val2) then return false end
-		return (val1.ptr == val2.ptr)
-	end
 end
 
 ]],
 ['generic_weak'] = [[
-local obj_type_${object_name}_check
 local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local ${object_name}_mt = _priv.${object_name}
-	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
-		struct ${object_name}_t {
-			${object_name} *ptr;
-			uint32_t       flags;
-		};
-		typedef struct ${object_name}_t ${object_name}_t;
-	]=])
-	local ${object_name}_objects = setmetatable({}, { __mode = "k",
-	__index = function(objects, ud_obj)
-		return obj_udata_to_cdata(objects, ud_obj, "${object_name} *", ${object_name}_mt)
-	end,
-	})
-	function obj_type_${object_name}_check(obj)
-		if ffi.istype("${object_name}_t", obj) then return obj.ptr end
-		return ${object_name}_objects[obj]
-	end
+	local obj_mt = _priv.${object_name}
+	local obj_flags = {}
 
-	function obj_type_${object_name}_delete(obj)
-		if ffi.istype("${object_name}_t", obj) then
-			local ptr, flags = obj.ptr, obj.flags
-			obj.ptr = nil
-			obj.flags = 0
-			return ptr, flags
-		end
-		${object_name}_objects[obj] = nil
-		return obj_udata_luadelete_weak(obj, ${object_name}_mt)
+	function obj_type_${object_name}_delete(ptr)
+		local id = obj_ptr_to_id(ptr)
+		local flags = obj_flags[id]
+		if not flags then return ptr, 0 end
+		ffi.gc(ptr, nil)
+		obj_flags[id] = nil
+		return ptr, flags
 	end
 
 	function obj_type_${object_name}_push(ptr, flags)
-		local obj = ffi.new("${object_name}_t")
-		obj.ptr = ptr
-		obj.flags = flags or 0
-		return obj
+		if flags then
+			local id = obj_ptr_to_id(ptr)
+			obj_flags[id] = flags
+			ffi.gc(ptr, obj_mt.__gc)
+		end
+		return ptr
 	end
 
-	function ${object_name}_mt:__tostring()
-		return "${object_name}: " .. tostring(self.ptr)
+	function obj_mt:__tostring()
+		local id = obj_ptr_to_id(self)
+		return "${object_name}: " .. tostring(id)
 	end
 
-	function ${object_name}_mt.__eq(val1, val2)
-		if not ffi.istype("${object_name}_t", val2) then return false end
-		return (val1.ptr == val2.ptr)
-	end
 end
 
 ]],
@@ -628,10 +630,32 @@ end
 
 local ffi_obj_metatype = {
 ['simple'] = "${object_name}_t",
+['simple ptr'] = "${object_name}_t",
 ['embed'] = "${object_name}",
 ['object id'] = "${object_name}_t",
-['generic'] = "${object_name}_t",
-['generic_weak'] = "${object_name}_t",
+['generic'] = nil,
+['generic_weak'] = "${object_name}",
+}
+
+local function get_var_name(var)
+	local name = 'self'
+	if not var.is_this then
+		name = '${' .. var.name .. '}'
+	end
+	return name
+end
+local function unwrap_value(self, var)
+	local name = get_var_name(var)
+	return name .. ' = ' .. name .. '._wrapped_val\n'
+end
+local function no_wrapper(self, var) return '\n' end
+local ffi_obj_type_check = {
+['simple'] = unwrap_value,
+['simple ptr'] = no_wrapper,
+['embed'] = no_wrapper,
+['object id'] = unwrap_value,
+['generic'] = no_wrapper,
+['generic_weak'] = no_wrapper,
 }
 
 -- module template
@@ -717,6 +741,20 @@ local function add_source(rec, part, src, pos)
 end
 
 print"============ Lua bindings ================="
+-- do some pre-processing of objects.
+process_records{
+object = function(self, rec, parent)
+	if rec.is_package then return end
+	local ud_type = rec.userdata_type
+	if not rec.no_weak_ref then
+		ud_type = ud_type .. '_weak'
+	end
+	rec.ud_type = ud_type
+	-- create _ffi_check function
+	rec._ffi_check = ffi_obj_type_check[ud_type]
+end,
+}
+
 local parsed = process_records{
 _modules_out = {},
 _includes = {},
@@ -872,21 +910,14 @@ object_end = function(self, rec, parent)
 		error("FFI-bindings doesn't support dynamic casters.")
 		dyn_caster = rec.has_dyn_caster.dyn_caster_name
 	end
-	-- create check/delete/push macros
-	local ud_type = rec.userdata_type
-	if not rec.no_weak_ref then
-		ud_type = ud_type .. '_weak'
-	end
-	if not rec.is_package then
-		-- create FFI check/delete/push functions
-		rec:write_part("ffi_obj_type", {
-			rec.ffi_custom_check_delete_push or ffi_obj_type_check_delete_push[ud_type],
-			'\n'
-		})
-	end
 	-- register metatable for FFI cdata type.
 	if not rec.is_package then
-		local c_metatype = ffi_obj_metatype[ud_type]
+		-- create FFI delete/push functions
+		rec:write_part("ffi_obj_type", {
+			rec.ffi_custom_delete_push or ffi_obj_type_delete_push[rec.ud_type],
+			'\n'
+		})
+		local c_metatype = ffi_obj_metatype[rec.ud_type]
 		if c_metatype then
 			rec:write_part("ffi_src",{
 				'ffi.metatype("',c_metatype,'", _priv.${object_name})\n'})
@@ -1070,7 +1101,7 @@ var_in = function(self, rec, parent)
 	-- no need to add code for 'lua_State *' parameters.
 	if rec.c_type == 'lua_State *' and rec.name == 'L' then return end
 	-- register variable for code gen (i.e. so ${var_name} is replaced with true variable name).
-	parent:add_rec_var(rec)
+	parent:add_rec_var(rec, rec.name, rec.is_this and 'self')
 	-- don't generate code for '<any>' type parameters
 	if rec.c_type == '<any>' then return end
 
@@ -1090,6 +1121,7 @@ var_in = function(self, rec, parent)
 			parent:write_part("ffi_pre",
 				{
 				'  ', lua:_ffi_delete(rec, false),
+				'  if not ${',rec.name,'} then return end\n',
 				})
 		end
 	elseif lua._rec_type ~= 'callback_func' then
@@ -1127,11 +1159,13 @@ var_out = function(self, rec, parent)
 		end
 	end
 	-- register variable for code gen (i.e. so ${var_name} is replaced with true variable name).
-	parent:add_rec_var(rec)
+	parent:add_rec_var(rec, rec.name, rec.is_this and 'self')
 	-- don't generate code for '<any>' type parameters
 	if rec.c_type == '<any>' then
-		parent:write_part("ffi_pre",
-			{'  local ${', rec.name, '}\n'})
+		if not rec.is_this then
+			parent:write_part("ffi_pre",
+				{'  local ${', rec.name, '}\n'})
+		end
 		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 		return
 	end
