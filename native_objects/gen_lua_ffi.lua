@@ -826,8 +826,9 @@ local C = ffi_load_cmodule("${module_c_name}", ]], global ,[[)
 	rec.functions_regs = 'function_regs'
 	rec.methods_regs = 'function_regs'
 	-- symbols to export to FFI
-	rec:write_part("ffi_export",
-		{'static const ffi_export_symbol ${module_c_name}_ffi_export[] = {\n'})
+	rec:write_part("ffi_export", {
+		'#if LUAJIT_FFI\n',
+		'static const ffi_export_symbol ${module_c_name}_ffi_export[] = {\n'})
 	-- start two ffi.cdef code blocks (one for typedefs and one for function prototypes).
 	rec:write_part("ffi_typedef", {
 	'ffi.cdef[[\n'
@@ -846,7 +847,8 @@ c_module_end = function(self, rec, parent)
 	-- end list of FFI symbols
 	rec:write_part("ffi_export", {
 	'  {NULL, NULL}\n',
-	'};\n\n'
+	'};\n',
+	'#endif\n\n'
 	})
 	add_source(rec, "luaopen_defs", rec:dump_parts{ "ffi_export" }, 1)
 	-- end ffi.cdef code blocks
