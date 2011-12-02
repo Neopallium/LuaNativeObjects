@@ -12,7 +12,7 @@ void method_call_destroy(method_call *call) {
 	assert(call == DEFAULT_PTR);
 }
 
-int method_call_simple(method_call *call) {
+int method_call_null(method_call *call) {
 	return 0;
 }
 
@@ -32,7 +32,10 @@ int method_call_simple(method_call *call) {
 		luaL_error(L, "INVALID PTR: %p != %p", ${this}, DEFAULT_PTR);
 	}
 ]],
-		--c_method_call "int" "method_call_simple" {},
+  },
+
+  method "null" {
+		c_method_call "int" "method_call_null" {},
   },
 
 }
