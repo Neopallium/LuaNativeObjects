@@ -423,6 +423,12 @@ do
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
 
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(obj)
+		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
+		return nil
+	end
+
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
 	end
@@ -464,6 +470,12 @@ local obj_type_${object_name}_push
 do
 	local obj_mt = _priv.${object_name}
 	local obj_flags = {}
+
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(ptr)
+		if ffi.istype("${object_name} *", ptr) then return ptr end
+		return nil
+	end
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr
@@ -509,6 +521,12 @@ do
 	local obj_mt = _priv.${object_name}
 	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(obj)
+		if ffi.istype("${object_name}", obj) then return obj end
+		return nil
+	end
+
 	function obj_type_${object_name}_check(obj)
 		return obj
 	end
@@ -548,6 +566,12 @@ do
 		};
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
+
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(obj)
+		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
+		return nil
+	end
 
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
@@ -591,6 +615,12 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_flags = {}
 
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(ptr)
+		if ffi.istype("${object_name} *", ptr) then return ptr end
+		return nil
+	end
+
 	function obj_type_${object_name}_check(ptr)
 		return ptr
 	end
@@ -630,6 +660,12 @@ do
 	local obj_mt = _priv.${object_name}
 	local objects = setmetatable({}, {__mode = "v"})
 	local obj_flags = {}
+
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(ptr)
+		if ffi.istype("${object_name} *", ptr) then return ptr end
+		return nil
+	end
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr

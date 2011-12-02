@@ -213,6 +213,9 @@ typedef struct obj_udata {
 /* use static pointer as key to weak userdata table. */
 static char *obj_udata_weak_ref_key = "obj_udata_weak_ref_key";
 
+/* use static pointer as key to module's private table. */
+static char *obj_udata_private_key = "obj_udata_private_key";
+
 ]]
 
 local objHelperFunc = [[
@@ -307,6 +310,25 @@ static FUNC_UNUSED obj_udata *obj_udata_luacheck_internal(lua_State *L, int _ind
 				return ud;
 			}
 		}
+	} else {
+		/* handle cdata. */
+		/* get private table. */
+		lua_pushlightuserdata(L, obj_udata_private_key);
+		lua_rawget(L, LUA_REGISTRYINDEX); /* private table. */
+		/* get cdata type check function from private table. */
+		lua_pushlightuserdata(L, type);
+		lua_rawget(L, -2);
+
+		/* pass cdata value to type checking function. */
+		lua_pushvalue(L, _index);
+		lua_call(L, 1, 1);
+		if(!lua_isnil(L, -1)) {
+			/* valid type get pointer from cdata. */
+			lua_pop(L, 2);
+			*obj = *(void **)lua_topointer(L, _index);
+			return ud;
+		}
+		lua_pop(L, 2);
 	}
 	if(not_delete) {
 		luaL_typerror(L, _index, type->name); /* is not a userdata value. */
@@ -475,6 +497,24 @@ static FUNC_UNUSED void * obj_simple_udata_luacheck(lua_State *L, int _index, ob
 				return ud;
 			}
 		}
+	} else {
+		/* handle cdata. */
+		/* get private table. */
+		lua_pushlightuserdata(L, obj_udata_private_key);
+		lua_rawget(L, LUA_REGISTRYINDEX); /* private table. */
+		/* get cdata type check function from private table. */
+		lua_pushlightuserdata(L, type);
+		lua_rawget(L, -2);
+
+		/* pass cdata value to type checking function. */
+		lua_pushvalue(L, _index);
+		lua_call(L, 1, 1);
+		if(!lua_isnil(L, -1)) {
+			/* valid type get pointer from cdata. */
+			lua_pop(L, 2);
+			return (void *)lua_topointer(L, _index);
+		}
+		lua_pop(L, 2);
 	}
 	luaL_typerror(L, _index, type->name); /* is not a userdata value. */
 	return NULL;
@@ -826,6 +866,9 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 	/* private table to hold reference to object metatables. */
 	lua_newtable(L);
 	priv_table = lua_gettop(L);
+	lua_pushlightuserdata(L, obj_udata_private_key);
+	lua_pushvalue(L, priv_table);
+	lua_rawset(L, LUA_REGISTRYINDEX);  /* store private table in registry. */
 
 	/* create object cache. */
 	create_object_instance_cache(L);
