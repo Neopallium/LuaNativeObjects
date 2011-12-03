@@ -166,21 +166,37 @@ local setmetatable = setmetatable
 local p_config = package.config
 local p_cpath = package.cpath
 
-local function ffi_load_cmodule(name, global)
-	local dir_sep = p_config:sub(1,1)
-	local path_sep = p_config:sub(3,3)
-	local path_mark = p_config:sub(5,5)
-	local path_match = "([^" .. path_sep .. "]*)" .. path_sep
-	-- convert dotted name to directory path.
-	name = name:gsub('%.', dir_sep)
-	-- try each path in search path.
-	for path in p_cpath:gmatch(path_match) do
-		local fname = path:gsub(path_mark, name)
-		local C, err = ffi_safe_load(fname, global)
-		-- return opened library
-		if C then return C end
+local ffi_load_cmodule
+
+-- try to detect luvit.
+if p_config == nil and p_cpath == nil then
+	ffi_load_cmodule = function(name, global)
+		for path,module in pairs(package.loaded) do
+			if type(module) == 'string' and path:match("zmq") then
+				local C, err = ffi_safe_load(path .. '.luvit', global)
+				-- return opened library
+				if C then return C end
+			end
+		end
+		error("Failed to find: " .. name)
 	end
-	error("Failed to find: " .. name)
+else
+	ffi_load_cmodule = function(name, global)
+		local dir_sep = p_config:sub(1,1)
+		local path_sep = p_config:sub(3,3)
+		local path_mark = p_config:sub(5,5)
+		local path_match = "([^" .. path_sep .. "]*)" .. path_sep
+		-- convert dotted name to directory path.
+		name = name:gsub('%.', dir_sep)
+		-- try each path in search path.
+		for path in p_cpath:gmatch(path_match) do
+			local fname = path:gsub(path_mark, name)
+			local C, err = ffi_safe_load(fname, global)
+			-- return opened library
+			if C then return C end
+		end
+		error("Failed to find: " .. name)
+	end
 end
 
 local _M, _priv, udata_new = ...
