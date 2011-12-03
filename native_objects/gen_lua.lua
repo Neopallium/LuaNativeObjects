@@ -211,10 +211,10 @@ typedef struct obj_udata {
 } obj_udata;
 
 /* use static pointer as key to weak userdata table. */
-static char *obj_udata_weak_ref_key = "obj_udata_weak_ref_key";
+static char obj_udata_weak_ref_key[] = "obj_udata_weak_ref_key";
 
 /* use static pointer as key to module's private table. */
-static char *obj_udata_private_key = "obj_udata_private_key";
+static char obj_udata_private_key[] = "obj_udata_private_key";
 
 ]]
 
