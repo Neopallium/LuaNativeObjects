@@ -489,6 +489,13 @@ local function strip_variable_tokens(val, tokens)
 	return prefix .. (tokens or '') .. postfix, val
 end
 
+local function clean_variable_type_name(vtype,vname)
+	local tokens
+	tokens, vtype = strip_variable_tokens(vtype)
+	tokens, vname = strip_variable_tokens(vname)
+	return vtype, vname
+end
+
 local function parse_variable_name(var)
 	-- no parsing needed for '<any>'
 	if var.c_type == '<any>' then return end
@@ -1104,8 +1111,7 @@ local function process_module_file(file)
 		params[#params+1] = "("
 		call[#call+1] = "("
 		for i=1,#list,2 do
-			local c_type = list[i]
-			local name = list[i+1]
+			local c_type,name = clean_variable_type_name(list[i], list[i+1])
 			if i > 1 then
 				params[#params+1] = ", "
 				call[#call+1] = ", "
