@@ -162,6 +162,7 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 local rawset = rawset
+local setmetatable = setmetatable
 local p_config = package.config
 local p_cpath = package.cpath
 
@@ -184,16 +185,7 @@ end
 
 local _M, _priv, udata_new = ...
 
-local band = bit.band
-local d_getmetatable = debug.getmetatable
-local d_setmetatable = debug.setmetatable
-
 local OBJ_UDATA_FLAG_OWN		= 1
-local OBJ_UDATA_FLAG_LOOKUP	= 2
-local OBJ_UDATA_LAST_FLAG		= OBJ_UDATA_FLAG_LOOKUP
-
-local OBJ_TYPE_FLAG_WEAK_REF	= 1
-local OBJ_TYPE_SIMPLE					= 2
 
 local function ffi_safe_cdef(block_name, cdefs)
 	local fake_type = "struct sentinel_" .. block_name .. "_ty"
@@ -235,154 +227,6 @@ int memcmp(const void *s1, const void *s2, size_t n);
 
 ]])
 
--- cache mapping of cdata to userdata
-local weak_objects = setmetatable({}, { __mode = "v" })
-
-local function obj_udata_luacheck_internal(obj, type_mt, not_delete)
-	local obj_mt = d_getmetatable(obj)
-	if obj_mt == type_mt then
-		-- convert userdata to cdata.
-		return ffi.cast("obj_udata *", obj)
-	end
-	if not_delete then
-		error("(expected `" .. type_mt['.name'] .. "`, got " .. type(obj) .. ")", 3)
-	end
-end
-
-local function obj_udata_luacheck(obj, type_mt)
-	local ud = obj_udata_luacheck_internal(obj, type_mt, true)
-	return ud.obj
-end
-
-local function obj_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
-	-- convert userdata to cdata.
-	local c_obj = ffi.cast(c_type, obj_udata_luacheck(ud_obj, ud_mt))
-	-- cache converted cdata
-	rawset(objects, ud_obj, c_obj)
-	return c_obj
-end
-
-local function obj_udata_luadelete(ud_obj, type_mt)
-	local ud = obj_udata_luacheck_internal(ud_obj, type_mt, false)
-	if not ud then return nil, 0 end
-	local obj, flags = ud.obj, ud.flags
-	-- null userdata.
-	ud.obj = nil
-	ud.flags = 0
-	-- invalid userdata, by setting the metatable to nil.
-	d_setmetatable(ud_obj, nil)
-	return obj, flags
-end
-
-local function obj_udata_luapush(obj, type_mt, obj_type, flags)
-	if obj == nil then return end
-
-	-- apply type's dynamic caster.
-	if obj_type.dcaster ~= nil then
-		local obj_ptr = ffi.new("void *[1]", obj)
-		local type_ptr = ffi.new("obj_type *[1]", obj_type)
-		obj_type.dcaster(obj_ptr, type_ptr)
-		obj = obj_ptr[1]
-		type = type_ptr[1]
-	end
-
-	-- create new userdata
-	local ud_obj = udata_new(ffi.sizeof"obj_udata", type_mt)
-	local ud = ffi.cast("obj_udata *", ud_obj)
-	-- init. object
-	ud.obj = obj
-	ud.flags = flags
-
-	return ud_obj
-end
-
-local function obj_udata_luadelete_weak(ud_obj, type_mt)
-	local ud = obj_udata_luacheck_internal(ud_obj, type_mt, false)
-	if not ud then return nil, 0 end
-	local obj, flags = ud.obj, ud.flags
-	-- null userdata.
-	ud.obj = nil
-	ud.flags = 0
-	-- invalid userdata, by setting the metatable to nil.
-	d_setmetatable(ud_obj, nil)
-	-- remove object from weak ref. table.
-	local obj_key = tonumber(ffi.cast('uintptr_t', obj))
-	weak_objects[obj_key] = nil
-	return obj, flags
-end
-
-local function obj_udata_luapush_weak(obj, type_mt, obj_type, flags)
-	if obj == nil then return end
-
-	-- apply type's dynamic caster.
-	if obj_type.dcaster ~= nil then
-		local obj_ptr = ffi.new("void *[1]", obj)
-		local type_ptr = ffi.new("obj_type *[1]", obj_type)
-		obj_type.dcaster(obj_ptr, type_ptr)
-		obj = obj_ptr[1]
-		type = type_ptr[1]
-	end
-
-	-- lookup object in weak ref. table.
-	local obj_key = tonumber(ffi.cast('uintptr_t', obj))
-	local ud_obj = weak_objects[obj_key]
-	if ud_obj ~= nil then return ud_obj end
-
-	-- create new userdata
-	ud_obj = udata_new(ffi.sizeof"obj_udata", type_mt)
-	local ud = ffi.cast("obj_udata *", ud_obj)
-	-- init. object
-	ud.obj = obj
-	ud.flags = flags
-
-	-- cache weak reference to object.
-	weak_objects[obj_key] = ud_obj
-
-	return ud_obj
-end
-
-local function obj_simple_udata_luacheck(ud_obj, type_mt)
-	local obj_mt = d_getmetatable(ud_obj)
-	if obj_mt == type_mt then
-		-- convert userdata to cdata.
-		return ffi.cast("void *", ud_obj)
-	end
-	error("(expected `" .. type_mt['.name'] .. "`, got " .. type(ud_obj) .. ")", 3)
-end
-
-local function obj_simple_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
-	-- convert userdata to cdata.
-	local c_obj = ffi.cast(c_type, obj_simple_udata_luacheck(ud_obj, ud_mt))[0]
-	-- cache converted cdata
-	rawset(objects, ud_obj, c_obj)
-	return c_obj
-end
-
-local function obj_embed_udata_to_cdata(objects, ud_obj, c_type, ud_mt)
-	-- convert userdata to cdata.
-	local c_obj = ffi.cast(c_type, obj_simple_udata_luacheck(ud_obj, ud_mt))
-	-- cache converted cdata
-	rawset(objects, ud_obj, c_obj)
-	return c_obj
-end
-
-local function obj_simple_udata_luadelete(ud_obj, type_mt)
-	-- invalid userdata, by setting the metatable to nil.
-	d_setmetatable(ud_obj, nil)
-end
-
-local function obj_simple_udata_luapush(c_obj, size, type_mt)
-	if c_obj == nil then return end
-
-	-- create new userdata
-	local ud_obj = udata_new(size, type_mt)
-	local cdata = ffi.cast("void *", ud_obj)
-	-- init. object
-	ffi.copy(cdata, c_obj, size)
-
-	return ud_obj, cdata
-end
-
 local function obj_ptr_to_id(ptr)
 	return tonumber(ffi.cast('uintptr_t', ptr))
 end
@@ -394,7 +238,7 @@ end
 local function register_default_constructor(_pub, obj_name, constructor)
 	local pub_constructor = _pub[obj_name]
 	if type(pub_constructor) == 'table' then
-		d_setmetatable(pub_constructor, { __call = function(t,...)
+		setmetatable(pub_constructor, { __call = function(t,...)
 			return constructor(...)
 		end,
 		__metatable = false,
@@ -581,7 +425,7 @@ do
 		local id = obj_ptr_to_id(obj)
 		local flags = obj_flags[id]
 		local val = obj._wrapped_val
-		if not flags then return val, 0 end
+		if not flags then return nil, 0 end
 		obj_flags[id] = nil
 		return val, flags
 	end
@@ -628,7 +472,7 @@ do
 	function obj_type_${object_name}_delete(ptr)
 		local id = obj_ptr_to_id(ptr)
 		local flags = obj_flags[id]
-		if not flags then return ptr, 0 end
+		if not flags then return nil, 0 end
 		ffi.gc(ptr, nil)
 		obj_flags[id] = nil
 		return ptr, flags
@@ -674,7 +518,7 @@ do
 	function obj_type_${object_name}_delete(ptr)
 		local id = obj_ptr_to_id(ptr)
 		local flags = obj_flags[id]
-		if not flags then return ptr, 0 end
+		if not flags then return nil, 0 end
 		ffi.gc(ptr, nil)
 		obj_flags[id] = nil
 		return ptr, flags
@@ -744,6 +588,13 @@ for obj_name,mt in pairs(_priv) do
 end
 _pub.${object_name} = _M
 for obj_name,pub in pairs(_M) do
+	if type(pub) == 'table' then
+		local new_pub = {}
+		for k,v in pairs(pub) do
+			new_pub[k] = v
+		end
+		pub = new_pub
+	end
 	_pub[obj_name] = pub
 end
 
@@ -1194,7 +1045,7 @@ var_in = function(self, rec, parent)
 			parent:write_part("ffi_pre",
 				{
 				'  ', lua:_ffi_delete(rec, true),
-				'  if(band(${',rec.name,'_flags},OBJ_UDATA_FLAG_OWN) == 0) then return end\n',
+				'  if not ${',rec.name,'} then return end\n',
 				})
 		else
 			-- for garbage collect method, check the ownership flag before freeing 'this' object.
