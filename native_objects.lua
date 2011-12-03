@@ -654,6 +654,17 @@ end
 end
 end
 
+function c_export_method_call(ret)
+	return function (cfunc)
+	return function (params)
+	local rec = c_method_call(ret)(cfunc)(params)
+	rec.ffi_need_wrapper = "c_export"
+	rec.is_export_call = true
+	return rec
+end
+end
+end
+
 function callback_type(name)
 	return function (return_type)
 	return function (params)
@@ -1110,6 +1121,15 @@ local function process_module_file(file)
 		local list = rec.params
 		params[#params+1] = "("
 		call[#call+1] = "("
+		if rec.is_method_call then
+			call[#call+1] = 'this'
+			params[#params+1] = object.c_type .. ' '
+			params[#params+1] = 'this'
+			if #list > 0 then
+				params[#params+1] = ", "
+				call[#call+1] = ", "
+			end
+		end
 		for i=1,#list,2 do
 			local c_type,name = clean_variable_type_name(list[i], list[i+1])
 			if i > 1 then
