@@ -1052,36 +1052,36 @@ var_in = function(self, rec, parent)
 	-- don't generate code for '<any>' type parameters
 	if rec.c_type == '<any>' then return end
 
-	local lua = rec.c_type_rec
+	local var_type = rec.c_type_rec
 	if rec.is_this and parent.__gc then
-		if lua.has_obj_flags then
+		if var_type.has_obj_flags then
 			-- add flags ${var_name_flags} variable
 			parent:add_rec_var(rec, rec.name .. '_flags')
 			-- for garbage collect method, check the ownership flag before freeing 'this' object.
 			parent:write_part("ffi_pre",
 				{
-				'  ', lua:_ffi_delete(rec, true),
+				'  ', var_type:_ffi_delete(rec, true),
 				'  if not ${',rec.name,'} then return end\n',
 				})
 		else
 			-- for garbage collect method, check the ownership flag before freeing 'this' object.
 			parent:write_part("ffi_pre",
 				{
-				'  ', lua:_ffi_delete(rec, false),
+				'  ', var_type:_ffi_delete(rec, false),
 				'  if not ${',rec.name,'} then return end\n',
 				})
 		end
-	elseif lua._rec_type ~= 'callback_func' then
-		if lua.lang_type == 'string' then
+	elseif var_type._rec_type ~= 'callback_func' then
+		if var_type.lang_type == 'string' then
 			-- add length ${var_name_len} variable
 			parent:add_rec_var(rec, rec.name .. '_len')
 		end
 		-- check lua value matches type.
 		local ffi_get
 		if rec.is_optional then
-			ffi_get = lua:_ffi_opt(rec, rec.default)
+			ffi_get = var_type:_ffi_opt(rec, rec.default)
 		else
-			ffi_get = lua:_ffi_check(rec)
+			ffi_get = var_type:_ffi_check(rec)
 		end
 		parent:write_part("ffi_pre",
 			{'  ', ffi_get })
@@ -1092,8 +1092,8 @@ var_out = function(self, rec, parent)
 		return
 	end
 	local flags = false
-	local lua = rec.c_type_rec
-	if lua.has_obj_flags then
+	local var_type = rec.c_type_rec
+	if var_type.has_obj_flags then
 		if (rec.is_this or rec.own) then
 			-- add flags ${var_name_flags} variable
 			parent:add_rec_var(rec, rec.name .. '_flags')
@@ -1117,8 +1117,8 @@ var_out = function(self, rec, parent)
 		return
 	end
 
-	local lua = rec.c_type_rec
-	if lua.lang_type == 'string' and rec.has_length then
+	local var_type = rec.c_type_rec
+	if var_type.lang_type == 'string' and rec.has_length then
 		-- add length ${var_name_len} variable
 		parent:add_rec_var(rec, rec.name .. '_len')
 		-- the function's code will provide the string's length.
@@ -1128,8 +1128,8 @@ var_out = function(self, rec, parent)
 	end
 	-- if the variable's type has a default value, then initialize the variable.
 	local init = ''
-	if lua.default then
-		init = ' = ' .. tostring(lua.default)
+	if var_type.default then
+		init = ' = ' .. tostring(var_type.default)
 	end
 	-- add C variable to hold value to be pushed.
 	local ffi_unwrap = ''
@@ -1160,7 +1160,7 @@ var_out = function(self, rec, parent)
 				'  -- check for error.\n',
 				'  local ${', rec.name,'}_err\n',
 				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
-				'    ${', rec.name, '}_err = ', lua:_ffi_push(rec, flags),
+				'    ${', rec.name, '}_err = ', var_type:_ffi_push(rec, flags),
 				'    ${', rec.name ,'} = nil\n',
 				'  else\n',
 				'    ${', rec.name ,'} = true\n',
@@ -1170,7 +1170,7 @@ var_out = function(self, rec, parent)
 			parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
 		else
 			parent:write_part("ffi_post", {
-				'  ${', rec.name ,'} = ', lua:_ffi_push(rec, flags), ffi_unwrap
+				'  ${', rec.name ,'} = ', var_type:_ffi_push(rec, flags), ffi_unwrap
 			})
 			parent:write_part("ffi_return", { "${", rec.name, "}, " })
 		end
@@ -1180,7 +1180,7 @@ var_out = function(self, rec, parent)
 		if err_type.ffi_is_error_check then
 			parent:write_part("ffi_post", {
 			'  if not ',err_type.ffi_is_error_check(error_code),' then\n',
-			'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags), ffi_unwrap,
+			'    ${', rec.name, '} = ', var_type:_ffi_push(rec, flags), ffi_unwrap,
 			'  else\n',
 			'    ${', rec.name, '} = nil\n',
 			'  end\n',
@@ -1191,16 +1191,16 @@ var_out = function(self, rec, parent)
 		-- if a function return NULL, then there was an error.
 		parent:write_part("ffi_post", {
 		'  local ${', rec.name,'}_err\n',
-		'  if ',lua.ffi_is_error_check(rec),' then\n',
-		'    ${', rec.name, '}_err = ', lua:_ffi_push_error(rec), ffi_unwrap,
+		'  if ',var_type.ffi_is_error_check(rec),' then\n',
+		'    ${', rec.name, '}_err = ', var_type:_ffi_push_error(rec), ffi_unwrap,
 		'  else\n',
-		'    ${', rec.name, '} = ', lua:_ffi_push(rec, flags), ffi_unwrap,
+		'    ${', rec.name, '} = ', var_type:_ffi_push(rec, flags), ffi_unwrap,
 		'  end\n',
 		})
 		parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
 	else
 		parent:write_part("ffi_post", {
-			'  ${', rec.name ,'} = ', lua:_ffi_push(rec, flags), ffi_unwrap
+			'  ${', rec.name ,'} = ', var_type:_ffi_push(rec, flags), ffi_unwrap
 		})
 		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 	end

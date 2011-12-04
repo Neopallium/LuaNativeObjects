@@ -1652,9 +1652,9 @@ var_in = function(self, rec, parent)
 	-- don't generate code for '<any>' type parameters
 	if rec.c_type == '<any>' then return end
 
-	local lua = rec.c_type_rec
+	local var_type = rec.c_type_rec
 	if rec.is_this and parent.__gc then
-		if lua.has_obj_flags then
+		if var_type.has_obj_flags then
 			-- add flags ${var_name_flags} variable
 			parent:add_rec_var(rec, rec.name .. '_flags')
 			local flags = '${' .. rec.name .. '_flags}'
@@ -1662,7 +1662,7 @@ var_in = function(self, rec, parent)
 			parent:write_part("pre",
 				{
 				'  int ',flags,' = 0;\n',
-				'  ', rec.c_type, lua:_delete(rec, '&(' .. flags .. ')'),
+				'  ', rec.c_type, var_type:_delete(rec, '&(' .. flags .. ')'),
 				})
 			parent:write_part("pre_src", {
 				'  if(!(',flags,' & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
@@ -1671,11 +1671,11 @@ var_in = function(self, rec, parent)
 			-- for garbage collect method, check the ownership flag before freeing 'this' object.
 			parent:write_part("pre",
 				{
-				'  ', rec.c_type, lua:_delete(rec, false),
+				'  ', rec.c_type, var_type:_delete(rec, false),
 				})
 		end
-	elseif lua._rec_type ~= 'callback_func' then
-		if lua.lang_type == 'string' then
+	elseif var_type._rec_type ~= 'callback_func' then
+		if var_type.lang_type == 'string' then
 			-- add length ${var_name_len} variable
 			parent:add_rec_var(rec, rec.name .. '_len')
 			-- add a variable to top of function for string's length.
@@ -1686,18 +1686,18 @@ var_in = function(self, rec, parent)
 		-- check lua value matches type.
 		local get
 		if rec.is_optional then
-			get = lua:_opt(rec, rec.default)
+			get = var_type:_opt(rec, rec.default)
 		else
-			get = lua:_check(rec)
+			get = var_type:_check(rec)
 		end
 		parent:write_part("pre",
 			{'  ', rec.c_type, get })
 	end
 	-- is a lua reference.
-	if lua.is_ref then
+	if var_type.is_ref then
 		parent:add_var(rec.name, rec.cb_func.c_func_name)
 		parent:write_part("src",
-			{'  wrap->', lua.ref_field, ' = ',lua:_check(rec) })
+			{'  wrap->', var_type.ref_field, ' = ',var_type:_check(rec) })
 	end
 end,
 var_out = function(self, rec, parent)
@@ -1705,8 +1705,8 @@ var_out = function(self, rec, parent)
 		return
 	end
 	local flags = false
-	local lua = rec.c_type_rec
-	if lua.has_obj_flags then
+	local var_type = rec.c_type_rec
+	if var_type.has_obj_flags then
 		if (rec.is_this or rec.own) then
 			-- add flags ${var_name_flags} variable
 			parent:add_rec_var(rec, rec.name .. '_flags')
@@ -1726,8 +1726,8 @@ var_out = function(self, rec, parent)
 		return
 	end
 
-	local lua = rec.c_type_rec
-	if lua.lang_type == 'string' and rec.has_length then
+	local var_type = rec.c_type_rec
+	if var_type.lang_type == 'string' and rec.has_length then
 		-- add length ${var_name_len} variable
 		parent:add_rec_var(rec, rec.name .. '_len')
 		-- the C code will provide the string's length.
@@ -1737,8 +1737,8 @@ var_out = function(self, rec, parent)
 	end
 	-- if the variable's type has a default value, then initialize the variable.
 	local init = ''
-	if lua.default then
-		init = ' = ' .. tostring(lua.default)
+	if var_type.default then
+		init = ' = ' .. tostring(var_type.default)
 	end
 	-- add C variable to hold value to be pushed.
 	parent:write_part("pre",
@@ -1760,21 +1760,21 @@ var_out = function(self, rec, parent)
 			'  /* check for error. */\n',
 			'  if(',err_type.is_error_check(error_code),') {\n',
 			'    lua_pushnil(L);\n',
-			'    ', lua:_push(rec, flags),
+			'    ', var_type:_push(rec, flags),
 			'  } else {\n',
 			'    lua_pushboolean(L, 1);\n',
 			'    lua_pushnil(L);\n',
 			'  }\n',
 			})
 		else
-			parent:write_part("post", { lua:_push(rec, flags) })
+			parent:write_part("post", { var_type:_push(rec, flags) })
 		end
 	elseif rec.no_nil_on_error ~= true and error_code then
 		local err_type = error_code.c_type_rec
 		-- return nil for this out variable, if there was an error.
 		parent:write_part("post", {
 		'  if(!',err_type.is_error_check(error_code),') {\n',
-		'  ', lua:_push(rec, flags),
+		'  ', var_type:_push(rec, flags),
 		'  } else {\n',
 		'    lua_pushnil(L);\n',
 		'  }\n',
@@ -1782,23 +1782,23 @@ var_out = function(self, rec, parent)
 	elseif rec.is_error_on_null then
 		-- if a function return NULL, then there was an error.
 		parent:write_part("post", {
-		'  if(',lua.is_error_check(rec),') {\n',
+		'  if(',var_type.is_error_check(rec),') {\n',
 		'    lua_pushnil(L);\n',
-		'  ', lua:_push_error(rec),
+		'  ', var_type:_push_error(rec),
 		'  } else {\n',
-		'  ', lua:_push(rec, flags),
+		'  ', var_type:_push(rec, flags),
 		'  }\n',
 		})
 	else
-		parent:write_part("post", { lua:_push(rec, flags) })
+		parent:write_part("post", { var_type:_push(rec, flags) })
 	end
 	parent.pushed_values = parent.pushed_values + push_count
 end,
 cb_in = function(self, rec, parent)
 	parent:add_rec_var(rec)
-	local lua = rec.c_type_rec
+	local var_type = rec.c_type_rec
 	if not rec.is_wrapped_obj then
-		parent:write_part("params", { lua:_push(rec) })
+		parent:write_part("params", { var_type:_push(rec) })
 		parent.cb_ins = parent.cb_ins + 1
 	else
 		-- this is the wrapped object parameter.
@@ -1808,11 +1808,11 @@ end,
 cb_out = function(self, rec, parent)
 	parent:add_rec_var(rec)
 	parent.cb_outs = parent.cb_outs + 1
-	local lua = rec.c_type_rec
+	local var_type = rec.c_type_rec
 	parent:write_part("vars",
 		{'  ', rec.c_type, ' ${', rec.name, '};\n'})
 	parent:write_part("post",
-		{'  ', lua:_to(rec) })
+		{'  ', var_type:_to(rec) })
 end,
 }
 
