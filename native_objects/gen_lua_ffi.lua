@@ -610,6 +610,7 @@ for obj_name,pub in pairs(_M) do
 			new_pub[k] = v
 		end
 		pub = new_pub
+		_M[obj_name] = pub
 	end
 	_pub[obj_name] = pub
 end

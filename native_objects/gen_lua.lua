@@ -874,7 +874,8 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 	create_object_instance_cache(L);
 
 	/* module table. */
-	luaL_register(L, "${module_name}", ${module_c_name}_function);
+	lua_newtable(L);
+	luaL_register(L, NULL, ${module_c_name}_function);
 
 	/* register module constants. */
 	obj_type_register_constants(L, ${module_c_name}_constants, -1, false);
@@ -917,7 +918,8 @@ LUA_NOBJ_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	create_object_instance_cache(L);
 
 	/* submodule table. */
-	luaL_register(L, "${module_name}.${object_name}", &(null_reg_list));
+	lua_newtable(L);
+	luaL_register(L, NULL, &(null_reg_list));
 
 	/* register submodule. */
 	lua_pushvalue(L, -1);   /* dup. submodule's table. */
