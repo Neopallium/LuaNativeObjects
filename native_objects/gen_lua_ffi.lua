@@ -1130,6 +1130,8 @@ var_out = function(self, rec, parent)
 	local init = ''
 	if var_type.default then
 		init = ' = ' .. tostring(var_type.default)
+	elseif var_type.userdata_type == 'embed' then
+		init = ' = ffi.new("' .. var_type.name .. '")'
 	end
 	-- add C variable to hold value to be pushed.
 	local ffi_unwrap = ''
@@ -1142,7 +1144,7 @@ var_out = function(self, rec, parent)
 		ffi_unwrap = '[0]'
 	else
 		parent:write_part("ffi_pre",
-			{'  local ${', rec.name, '}\n'})
+			{'  local ${', rec.name, '}',init,'\n'})
 	end
 	-- if this is a temp. variable, then we are done.
 	if rec.is_temp then

@@ -1739,6 +1739,10 @@ var_out = function(self, rec, parent)
 	local init = ''
 	if var_type.default then
 		init = ' = ' .. tostring(var_type.default)
+	elseif var_type.userdata_type == 'embed' then
+		parent:write_part("pre",
+			{'  ', var_type.name, ' ${', rec.name, '}_store;\n'})
+		init = ' = &(${' .. rec.name .. '}_store);'
 	end
 	-- add C variable to hold value to be pushed.
 	parent:write_part("pre",
