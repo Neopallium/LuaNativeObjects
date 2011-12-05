@@ -1013,10 +1013,33 @@ end
 local function add_field(rec, field)
 end
 
+local function gen_if_defs_code(rec)
+	if rec.c_if_defs then return end
+	-- generate #if code for if_defs.
+	local if_defs = rec.if_defs
+	local endif
+	if type(if_defs) == 'string' then
+		if_defs = "#if (" .. if_defs .. ')\n'
+		endif = '#endif\n'
+	elseif type(if_defs) == 'table' then
+		if_defs = "#if (" .. table.concat(if_defs,"|") .. ')\n'
+		endif = '#endif\n'
+	else
+		if_defs = ''
+		endif = ''
+	end
+	rec.c_if_defs = if_defs
+	rec.c_endif = endif
+end
+
 local function reg_object_function(self, func, object)
 	local name = func.name
 	local c_name = func.c_name
 	local reg_list
+
+	-- generate #if/#endif code
+	gen_if_defs_code(func)
+
 	-- check if this is object free/destructure method
 	if func.is_destructor then
 		-- add '__gc' method.
@@ -1043,7 +1066,7 @@ local function reg_object_function(self, func, object)
 	end
 	-- add method to reg list.
 	object:write_part(reg_list,
-		{'  {"', name, '", ', c_name, '},\n'})
+		{func.c_if_defs, '  {"', name, '", ', c_name, '},\n', func.c_endif})
 	return name
 end
 
@@ -1591,11 +1614,12 @@ c_function = function(self, rec, parent)
 	if rec.is_destructor then
 		rec.__gc = true -- mark as '__gc' method
 	end
+
 	-- register method/function with object.
 	local name = reg_object_function(self, rec, parent)
 
 	rec:write_part("pre",
-	{'/* method: ', rec.name, ' */\n',
+	{'/* method: ', name, ' */\n', rec.c_if_defs,
 		'static int ', rec.c_name, '(lua_State *L) {\n'})
 	-- is this a wrapper function
 	if rec.wrapper_obj then
@@ -1636,7 +1660,7 @@ c_function_end = function(self, rec, parent)
 	local outs = rec.pushed_values
 	rec:write_part("post",
 		{'  return ', outs, ';\n',
-		 '}\n\n'})
+		 '}\n', rec.c_endif, '\n'})
 
 	-- finialize C function code.
 	self._cur_module:write_part('methods', rec:dump_parts(parts))

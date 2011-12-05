@@ -655,6 +655,23 @@ local function dump_lua_code_to_c_str(code)
 	return '"' .. code .. '";'
 end
 
+local function gen_if_defs_code(rec)
+	if rec.ffi_if_defs then return end
+	-- generate if code for if_defs.
+	local if_defs = rec.if_defs
+	local endif = 'end\n'
+	if type(if_defs) == 'string' then
+		if_defs = "if (" .. if_defs .. ') then\n'
+	elseif type(if_defs) == 'table' then
+		if_defs = "if (" .. table.concat(if_defs," or ") .. ') then\n'
+	else
+		if_defs = ''
+		endif = ''
+	end
+	rec.ffi_if_defs = if_defs
+	rec.ffi_endif = endif
+end
+
 local function reg_object_function(self, func, object)
 	local ffi_table = '_meth'
 	local name = func.name
@@ -951,6 +968,7 @@ extends = function(self, rec, parent)
 		if parent.name_map[name] == nil then
 			parent.name_map[name] = val
 			if val._is_method and not val.is_constructor then
+				gen_if_defs_code(val)
 				-- register base class's method with sub class
 				local ffi_table, name = reg_object_function(self, val, parent)
 				-- write ffi code to remove registered base class method.
@@ -958,8 +976,8 @@ extends = function(self, rec, parent)
 				{ffi_table,'.${object_name}.', name, ' = nil\n'})
 				-- write ffi code to copy method from base class.
 				parent:write_part("ffi_extends",
-				{ffi_table,'.${object_name}.',name,' = ',
-					ffi_table,'.',base.name,'.',name,'\n'})
+				{val.ffi_if_defs, ffi_table,'.${object_name}.',name,' = ',
+					ffi_table,'.',base.name,'.',name,'\n', val.ffi_endif})
 			end
 		end
 	end
@@ -985,6 +1003,9 @@ c_function = function(self, rec, parent)
 			rec.is__default_destructor = true
 		end
 	end
+	-- generate if code for if_defs.
+	gen_if_defs_code(rec)
+
 	-- register method/function with object.
 	local ffi_table, name = reg_object_function(self, rec, parent)
 	rec.ffi_table = ffi_table
@@ -992,7 +1013,7 @@ c_function = function(self, rec, parent)
 
 	-- generate FFI function
 	rec:write_part("ffi_pre",
-	{'-- method: ', name, '\n',
+	{'-- method: ', name, '\n', rec.ffi_if_defs,
 		'function ',ffi_table,'.${object_name}.', name, '(',rec.ffi_params,')\n'})
 end,
 c_function_end = function(self, rec, parent)
@@ -1003,6 +1024,12 @@ c_function_end = function(self, rec, parent)
 	local ffi_src = rec:dump_parts("ffi_src")
 	if rec.no_ffi or #ffi_src == 0 then return end
 
+	-- generate if code for if_defs.
+	local endif = '\n'
+	if rec.if_defs then
+		endif = 'end\n\n'
+	end
+
 	-- end Lua code for FFI function
 	local ffi_parts = {"ffi_temps", "ffi_pre", "ffi_src", "ffi_post"}
 	local ffi_return = rec:dump_parts("ffi_return")
@@ -1010,7 +1037,7 @@ c_function_end = function(self, rec, parent)
 	ffi_return = ffi_return:gsub(", $","")
 	rec:write_part("ffi_post",
 		{'  return ', ffi_return,'\n',
-		 'end\n\n'})
+		 'end\n', rec.ffi_endif})
 
 	-- check if this is the default constructor.
 	if rec.is_default_constructor then
