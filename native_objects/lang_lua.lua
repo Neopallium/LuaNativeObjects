@@ -80,12 +80,12 @@ process_records{
 	basetype = function(self, rec, parent)
 		local l_type = lua_base_types[rec.lang_type]
 		if l_type ~= nil then
-			rec._ffi_push = function(self, var)
+			rec._ffi_push = function(self, var, flags, unwrap)
 				local wrap = var.ffi_wrap
 				if wrap then
-					return wrap .. '(${' .. var.name .. '})\n'
+					return wrap .. '(${' .. var.name .. '})' .. (unwrap or '') .. '\n'
 				else
-					return '${' .. var.name .. '}\n'
+					return '${' .. var.name .. '}' .. (unwrap or '') .. '\n'
 				end
 			end
 			if rec.lang_type == 'string' then
@@ -176,8 +176,8 @@ process_records{
 			return '  ' .. func_name ..'(L, ${' .. var.name .. '});\n'
 		end
 		rec._push_error = rec._push
-		rec._ffi_push = function(self, var)
-			return '  ' .. func_name ..'(${' .. var.name .. '})\n'
+		rec._ffi_push = function(self, var, flags, unwrap)
+			return '  ' .. func_name ..'(${' .. var.name .. '})' .. (unwrap or '') .. '\n'
 		end
 		rec._ffi_push_error = rec._ffi_push
 	end,
@@ -220,12 +220,12 @@ process_records{
 			end
 			return 'local ${'..var.name..'},${'..var.name..'_flags} = '..type_name..'_delete(self)\n'
 		end
-		rec._ffi_push = function(self, var, flags)
+		rec._ffi_push = function(self, var, flags, unwrap)
 			if flags == false then
-				return '  '..type_name..'_push(${'..var.name..'})\n'
+				return '  '..type_name..'_push(${'..var.name..'})' .. (unwrap or '') .. '\n'
 			end
 			if flags == nil then flags = '0' end
-			return '  '..type_name..'_push(${'..var.name..'}, ' .. flags .. ')\n'
+			return '  '..type_name..'_push(${'..var.name..'}, ' .. flags .. ')' .. (unwrap or '') .. '\n'
 		end
 		if rec.error_on_null then
 			rec._push_error = function(self, var)

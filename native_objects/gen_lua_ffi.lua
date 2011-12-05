@@ -1200,7 +1200,7 @@ var_out = function(self, rec, parent)
 			parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
 		else
 			parent:write_part("ffi_post", {
-				'  ${', rec.name ,'} = ', var_type:_ffi_push(rec, flags), ffi_unwrap
+				'  ${', rec.name ,'} = ', var_type:_ffi_push(rec, flags, ffi_unwrap)
 			})
 			parent:write_part("ffi_return", { "${", rec.name, "}, " })
 		end
@@ -1210,7 +1210,7 @@ var_out = function(self, rec, parent)
 		if err_type.ffi_is_error_check then
 			parent:write_part("ffi_post", {
 			'  if not ',err_type.ffi_is_error_check(error_code),' then\n',
-			'    ${', rec.name, '} = ', var_type:_ffi_push(rec, flags), ffi_unwrap,
+			'    ${', rec.name, '} = ', var_type:_ffi_push(rec, flags, ffi_unwrap),
 			'  else\n',
 			'    ${', rec.name, '} = nil\n',
 			'  end\n',
@@ -1222,15 +1222,15 @@ var_out = function(self, rec, parent)
 		parent:write_part("ffi_post", {
 		'  local ${', rec.name,'}_err\n',
 		'  if ',var_type.ffi_is_error_check(rec),' then\n',
-		'    ${', rec.name, '}_err = ', var_type:_ffi_push_error(rec), ffi_unwrap,
+		'    ${', rec.name, '}_err = ', var_type:_ffi_push_error(rec),
 		'  else\n',
-		'    ${', rec.name, '} = ', var_type:_ffi_push(rec, flags), ffi_unwrap,
+		'    ${', rec.name, '} = ', var_type:_ffi_push(rec, flags, ffi_unwrap),
 		'  end\n',
 		})
 		parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
 	else
 		parent:write_part("ffi_post", {
-			'  ${', rec.name ,'} = ', var_type:_ffi_push(rec, flags), ffi_unwrap
+			'  ${', rec.name ,'} = ', var_type:_ffi_push(rec, flags, ffi_unwrap)
 		})
 		parent:write_part("ffi_return", { "${", rec.name, "}, " })
 	end
