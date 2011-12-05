@@ -83,9 +83,9 @@ process_records{
 			rec._ffi_push = function(self, var, flags, unwrap)
 				local wrap = var.ffi_wrap
 				if wrap then
-					return wrap .. '(${' .. var.name .. '})' .. (unwrap or '') .. '\n'
+					return wrap .. '(${' .. var.name .. '})' .. (unwrap or '')
 				else
-					return '${' .. var.name .. '}' .. (unwrap or '') .. '\n'
+					return '${' .. var.name .. '}' .. (unwrap or '')
 				end
 			end
 			if rec.lang_type == 'string' then
@@ -120,9 +120,9 @@ process_records{
 					if var.has_length then
 						return
 						'((nil ~= ${' .. var.name .. '}) and ' ..
-						'ffi.string(${' .. var.name .. '},${' .. var.name .. '_len}))\n'
+						'ffi.string(${' .. var.name .. '},${' .. var.name .. '_len}))'
 					end
-					return '((nil ~= ${' .. var.name .. '}) and ffi.string(${' .. var.name .. '}))\n'
+					return '((nil ~= ${' .. var.name .. '}) and ffi.string(${' .. var.name .. '}))'
 				end
 				rec._ffi_check = function(self, var)
 					return 'local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
@@ -177,7 +177,7 @@ process_records{
 		end
 		rec._push_error = rec._push
 		rec._ffi_push = function(self, var, flags, unwrap)
-			return '  ' .. func_name ..'(${' .. var.name .. '})' .. (unwrap or '') .. '\n'
+			return func_name ..'(${' .. var.name .. '})' .. (unwrap or '')
 		end
 		rec._ffi_push_error = rec._ffi_push
 	end,
@@ -222,17 +222,17 @@ process_records{
 		end
 		rec._ffi_push = function(self, var, flags, unwrap)
 			if flags == false then
-				return '  '..type_name..'_push(${'..var.name..'})' .. (unwrap or '') .. '\n'
+				return type_name..'_push(${'..var.name..'})' .. (unwrap or '')
 			end
 			if flags == nil then flags = '0' end
-			return '  '..type_name..'_push(${'..var.name..'}, ' .. flags .. ')' .. (unwrap or '') .. '\n'
+			return type_name..'_push(${'..var.name..'}, ' .. flags .. ')' .. (unwrap or '')
 		end
 		if rec.error_on_null then
 			rec._push_error = function(self, var)
 				return '  lua_pushstring(L, ' .. rec.error_on_null .. ');\n'
 			end
 			rec._ffi_push_error = function(self, var)
-				return '  ' .. rec.error_on_null .. '\n'
+				return rec.error_on_null
 			end
 		end
 	end,

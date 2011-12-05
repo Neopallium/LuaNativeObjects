@@ -1188,51 +1188,34 @@ var_out = function(self, rec, parent)
 			if err_type.ffi_is_error_check then
 				parent:write_part("ffi_post", {
 				'  -- check for error.\n',
-				'  local ${', rec.name,'}_err\n',
 				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
-				'    ${', rec.name, '}_err = ', var_type:_ffi_push(rec, flags),
-				'    ${', rec.name ,'} = nil\n',
-				'  else\n',
-				'    ${', rec.name ,'} = true\n',
+				'    return nil, ', var_type:_ffi_push(rec, flags), '\n',
 				'  end\n',
 				})
+				parent:write_part("ffi_return", { "true, " })
 			end
-			parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
-		else
-			parent:write_part("ffi_post", {
-				'  ${', rec.name ,'} = ', var_type:_ffi_push(rec, flags, ffi_unwrap)
-			})
-			parent:write_part("ffi_return", { "${", rec.name, "}, " })
 		end
 	elseif rec.no_nil_on_error ~= true and error_code then
 		local err_type = error_code.c_type_rec
 		-- return nil for this out variable, if there was an error.
 		if err_type.ffi_is_error_check then
 			parent:write_part("ffi_post", {
-			'  if not ',err_type.ffi_is_error_check(error_code),' then\n',
-			'    ${', rec.name, '} = ', var_type:_ffi_push(rec, flags, ffi_unwrap),
-			'  else\n',
-			'    ${', rec.name, '} = nil\n',
+			'  if ',err_type.ffi_is_error_check(error_code),' then\n',
+			'    return nil,', err_type:_ffi_push(error_code), '\n',
 			'  end\n',
 			})
 		end
-		parent:write_part("ffi_return", { "${", rec.name, "}, " })
+		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags, ffi_unwrap), ", " })
 	elseif rec.is_error_on_null then
 		-- if a function return NULL, then there was an error.
 		parent:write_part("ffi_post", {
-		'  local ${', rec.name,'}_err\n',
 		'  if ',var_type.ffi_is_error_check(rec),' then\n',
-		'    ${', rec.name, '}_err = ', var_type:_ffi_push_error(rec),
-		'  else\n',
-		'    ${', rec.name, '} = ', var_type:_ffi_push(rec, flags, ffi_unwrap),
+		'    return nil, ', var_type:_ffi_push_error(rec), '\n',
 		'  end\n',
 		})
-		parent:write_part("ffi_return", { "${", rec.name, "}, ${", rec.name, "}_err, " })
+		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags, ffi_unwrap), ", " })
 	else
-		parent:write_part("ffi_post", {
-			'  ${', rec.name ,'} = ', var_type:_ffi_push(rec, flags, ffi_unwrap)
-		})
-		parent:write_part("ffi_return", { "${", rec.name, "}, " })
+		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags, ffi_unwrap), ", " })
 	end
 end,
 cb_in = function(self, rec, parent)
