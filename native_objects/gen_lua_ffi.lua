@@ -252,16 +252,24 @@ local function obj_to_id(ptr)
 end
 
 local function register_default_constructor(_pub, obj_name, constructor)
-	local pub_constructor = _pub[obj_name]
-	if type(pub_constructor) == 'table' then
-		setmetatable(pub_constructor, { __call = function(t,...)
+	local obj_pub = _pub[obj_name]
+	if type(obj_pub) == 'table' then
+		-- copy table since it might have a locked metatable
+		local new_pub = {}
+		for k,v in pairs(obj_pub) do
+			new_pub[k] = v
+		end
+		setmetatable(new_pub, { __call = function(t,...)
 			return constructor(...)
 		end,
 		__metatable = false,
 		})
+		obj_pub = new_pub
 	else
-		_pub[obj_name] = constructor
+		obj_pub = constructor
 	end
+	_pub[obj_name] = obj_pub
+	_M[obj_name] = obj_pub
 end
 ]===]
 
@@ -604,14 +612,6 @@ for obj_name,mt in pairs(_priv) do
 end
 _pub.${object_name} = _M
 for obj_name,pub in pairs(_M) do
-	if type(pub) == 'table' then
-		local new_pub = {}
-		for k,v in pairs(pub) do
-			new_pub[k] = v
-		end
-		pub = new_pub
-		_M[obj_name] = pub
-	end
 	_pub[obj_name] = pub
 end
 
