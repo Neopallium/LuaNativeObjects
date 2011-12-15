@@ -519,6 +519,7 @@ end
 function subfiles(files)
 	local level = #path_stack
 	local cur_path = path_stack[level]
+	local rc
 	level = level + 1
 	-- use a new roots list to catch records from subfiles
 	local prev_roots = root_records
@@ -540,7 +541,7 @@ function subfiles(files)
 		end
 		-- check file path
 		print("Parsing records from file: " .. file)
-		dofile(file)
+		rc = {dofile(file)}
 		-- pop path
 		if cur_path ~= file_path then
 			path_stack[level] = nil
@@ -549,7 +550,7 @@ function subfiles(files)
 	-- move sub-records into new array
 	local rec={}
 	for i=1,#root_records do
-		rec[#rec + 1] = root_records[i]
+		rec[i] = root_records[i]
 	end
 
 	-- switch back to previous roots list
@@ -557,6 +558,9 @@ function subfiles(files)
 
 	-- make this into a record holding the sub-records from each of the sub-files
 	rec = make_record(rec, "subfiles")
+	if #rc > 0 then
+		return rec, rc
+	end
 	return rec
 end
 -- process some container records
