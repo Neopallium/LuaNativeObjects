@@ -34,18 +34,10 @@ typedef struct ffi_export_symbol {
 
 local objHelperFunc = [[
 #if LUAJIT_FFI
-static int nobj_udata_new_ffi(lua_State *L) {
-	size_t size = luaL_checkinteger(L, 1);
-	luaL_checktype(L, 2, LUA_TTABLE);
-	lua_settop(L, 2);
-	/* create userdata. */
-	lua_newuserdata(L, size);
-	lua_replace(L, 1);
-	/* set userdata's metatable. */
-	lua_setmetatable(L, 1);
-	return 1;
-}
 
+/* nobj_ffi_support_enabled_hint should be set to 1 when FFI support is enabled in at-least one
+ * instance of a LuaJIT state.  It should never be set back to 0. */
+static int nobj_ffi_support_enabled_hint = 0;
 static const char nobj_ffi_support_key[] = "LuaNativeObject_FFI_SUPPORT";
 static const char nobj_check_ffi_support_code[] =
 "local stat, ffi=pcall(require,\"ffi\")\n" /* try loading LuaJIT`s FFI module. */
@@ -87,6 +79,12 @@ static int nobj_check_ffi_support(lua_State *L) {
 	lua_pushstring(L, nobj_ffi_support_key);
 	lua_pushboolean(L, rc);
 	lua_rawset(L, LUA_REGISTRYINDEX);
+
+	/* turn-on hint that there is FFI code enabled. */
+	if(rc) {
+		nobj_ffi_support_enabled_hint = 1;
+	}
+
 	return rc;
 }
 
@@ -107,7 +105,7 @@ static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
 		lua_pushvalue(L, -2); /* dup C module's table. */
 		lua_pushvalue(L, priv_table); /* move priv_table to top of stack. */
 		lua_remove(L, priv_table);
-		lua_pushcfunction(L, nobj_udata_new_ffi);
+		lua_pushvalue(L, LUA_REGISTRYINDEX);
 		err = lua_pcall(L, 3, 0, 0);
 	}
 	if(err) {
@@ -199,7 +197,7 @@ else
 	end
 end
 
-local _M, _priv, udata_new = ...
+local _M, _priv, reg_table = ...
 
 local OBJ_UDATA_FLAG_OWN		= 1
 
@@ -291,12 +289,6 @@ do
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
 
-	local obj_type = obj_mt['.type']
-	_priv[obj_type] = function(obj)
-		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
-		return nil
-	end
-
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
 	end
@@ -327,6 +319,17 @@ do
 		return (val1._wrapped_val == val2._wrapped_val)
 	end
 
+	-- type checking function for C API.
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(obj)
+		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
+		return nil
+	end
+	-- push function for C API.
+	reg_table[obj_type] = function(ptr)
+		return obj_type_${object_name}_push(ptr[0])
+	end
+
 end
 
 ]],
@@ -338,12 +341,6 @@ local obj_type_${object_name}_push
 do
 	local obj_mt = _priv.${object_name}
 	local obj_flags = {}
-
-	local obj_type = obj_mt['.type']
-	_priv[obj_type] = function(ptr)
-		if ffi.istype("${object_name} *", ptr) then return ptr end
-		return nil
-	end
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr
@@ -377,6 +374,17 @@ do
 		return "${object_name}: " .. tostring(id)
 	end
 
+	-- type checking function for C API.
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(ptr)
+		if ffi.istype("${object_name} *", ptr) then return ptr end
+		return nil
+	end
+	-- push function for C API.
+	reg_table[obj_type] = function(ptr)
+		return obj_type_${object_name}_push(ptr[0])
+	end
+
 end
 
 ]],
@@ -388,12 +396,6 @@ local obj_type_${object_name}_push
 do
 	local obj_mt = _priv.${object_name}
 	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
-
-	local obj_type = obj_mt['.type']
-	_priv[obj_type] = function(obj)
-		if ffi.istype("${object_name}", obj) then return obj end
-		return nil
-	end
 
 	function obj_type_${object_name}_check(obj)
 		return obj
@@ -416,6 +418,20 @@ do
 		assert(ffi.istype("${object_name}", val1), "expected ${object_name}")
 		return (C.memcmp(val1, val2, ${object_name}_sizeof) == 0)
 	end
+
+	-- type checking function for C API.
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(obj)
+		if ffi.istype("${object_name}", obj) then return obj end
+		return nil
+	end
+	-- push function for C API.
+	reg_table[obj_type] = function(ptr)
+		local obj = ffi.new("${object_name}")
+		ffi.copy(obj, ptr, ${object_name}_sizeof);
+		return obj
+	end
+
 end
 
 ]],
@@ -434,12 +450,6 @@ do
 		};
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
-
-	local obj_type = obj_mt['.type']
-	_priv[obj_type] = function(obj)
-		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
-		return nil
-	end
 
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
@@ -471,6 +481,17 @@ do
 		return (val1._wrapped_val == val2._wrapped_val)
 	end
 
+	-- type checking function for C API.
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(obj)
+		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
+		return nil
+	end
+	-- push function for C API.
+	reg_table[obj_type] = function(ptr, flags)
+		return obj_type_${object_name}_push(ffi.cast('uintptr_t',ptr), flags)
+	end
+
 end
 
 ]],
@@ -482,12 +503,6 @@ local obj_type_${object_name}_push
 do
 	local obj_mt = _priv.${object_name}
 	local obj_flags = {}
-
-	local obj_type = obj_mt['.type']
-	_priv[obj_type] = function(ptr)
-		if ffi.istype("${object_name} *", ptr) then return ptr end
-		return nil
-	end
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr
@@ -516,6 +531,17 @@ do
 		return "${object_name}: " .. tostring(id)
 	end
 
+	-- type checking function for C API.
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(ptr)
+		if ffi.istype("${object_name} *", ptr) then return ptr end
+		return nil
+	end
+	-- push function for C API.
+	reg_table[obj_type] = function(ptr, flags)
+		return obj_type_${object_name}_push(ffi.cast('${object_name} *',ptr), flags)
+	end
+
 end
 
 ]],
@@ -528,12 +554,6 @@ do
 	local obj_mt = _priv.${object_name}
 	local objects = setmetatable({}, {__mode = "v"})
 	local obj_flags = {}
-
-	local obj_type = obj_mt['.type']
-	_priv[obj_type] = function(ptr)
-		if ffi.istype("${object_name} *", ptr) then return ptr end
-		return nil
-	end
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr
@@ -564,6 +584,17 @@ do
 	function obj_mt:__tostring()
 		local id = obj_ptr_to_id(self)
 		return "${object_name}: " .. tostring(id)
+	end
+
+	-- type checking function for C API.
+	local obj_type = obj_mt['.type']
+	_priv[obj_type] = function(ptr)
+		if ffi.istype("${object_name} *", ptr) then return ptr end
+		return nil
+	end
+	-- push function for C API.
+	reg_table[obj_type] = function(ptr, flags)
+		return obj_type_${object_name}_push(ffi.cast('${object_name} *',ptr), flags)
 	end
 
 end

@@ -369,6 +369,17 @@ static FUNC_UNUSED void obj_udata_luapush(lua_State *L, void *obj, obj_type *typ
 		lua_pushnil(L);
 		return;
 	}
+#if LUAJIT_FFI
+	lua_pushlightuserdata(L, type);
+	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
+	if(nobj_ffi_support_enabled_hint && lua_isfunction(L, -1)) {
+		/* call special FFI "void *" to FFI object convertion function. */
+		lua_pushlightuserdata(L, obj);
+		lua_pushinteger(L, flags);
+		lua_call(L, 2, 1);
+		return;
+	}
+#endif
 	/* check for type caster. */
 	if(type->dcaster) {
 		(type->dcaster)(&obj, &type);
@@ -378,8 +389,12 @@ static FUNC_UNUSED void obj_udata_luapush(lua_State *L, void *obj, obj_type *typ
 	ud->obj = obj;
 	ud->flags = flags;
 	/* get obj_type metatable. */
+#if LUAJIT_FFI
+	lua_insert(L, -2); /* move userdata below metatable. */
+#else
 	lua_pushlightuserdata(L, type);
 	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
+#endif
 	lua_setmetatable(L, -2);
 }
 
@@ -425,6 +440,17 @@ static FUNC_UNUSED void obj_udata_luapush_weak(lua_State *L, void *obj, obj_type
 	}
 	lua_pop(L, 1);  /* pop nil. */
 
+#if LUAJIT_FFI
+	lua_pushlightuserdata(L, type);
+	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
+	if(nobj_ffi_support_enabled_hint && lua_isfunction(L, -1)) {
+		/* call special FFI "void *" to FFI object convertion function. */
+		lua_pushlightuserdata(L, obj);
+		lua_pushinteger(L, flags);
+		lua_call(L, 2, 1);
+		return;
+	}
+#endif
 	/* create new userdata. */
 	ud = (obj_udata *)lua_newuserdata(L, sizeof(obj_udata));
 
@@ -432,8 +458,12 @@ static FUNC_UNUSED void obj_udata_luapush_weak(lua_State *L, void *obj, obj_type
 	ud->obj = obj;
 	ud->flags = flags;
 	/* get obj_type metatable. */
+#if LUAJIT_FFI
+	lua_insert(L, -2); /* move userdata below metatable. */
+#else
 	lua_pushlightuserdata(L, type);
 	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
+#endif
 	lua_setmetatable(L, -2);
 
 	/* add weak reference to object. */
@@ -538,12 +568,26 @@ static FUNC_UNUSED void * obj_simple_udata_luadelete(lua_State *L, int _index, o
 
 static FUNC_UNUSED void *obj_simple_udata_luapush(lua_State *L, void *obj, int size, obj_type *type)
 {
+#if LUAJIT_FFI
+	lua_pushlightuserdata(L, type);
+	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
+	if(nobj_ffi_support_enabled_hint && lua_isfunction(L, -1)) {
+		/* call special FFI "void *" to FFI object convertion function. */
+		lua_pushlightuserdata(L, obj);
+		lua_call(L, 1, 1);
+		return obj;
+	}
+#endif
 	/* create new userdata. */
 	void *ud = lua_newuserdata(L, size);
 	memcpy(ud, obj, size);
 	/* get obj_type metatable. */
+#if LUAJIT_FFI
+	lua_insert(L, -2); /* move userdata below metatable. */
+#else
 	lua_pushlightuserdata(L, type);
 	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
+#endif
 	lua_setmetatable(L, -2);
 
 	return ud;
