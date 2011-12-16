@@ -679,7 +679,7 @@ local function reg_object_function(self, func, object)
 	if func.is_destructor then
 		if func._is_hidden then
 			-- don't register '__gc' metamethods as a public object method.
-			return '_priv', '__gc'
+			return '_priv.${object_name}.', '_priv', '__gc'
 		end
 	elseif func.is_constructor then
 		ffi_table = '_pub'
