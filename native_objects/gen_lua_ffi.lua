@@ -610,7 +610,6 @@ for obj_name,mt in pairs(_priv) do
 		_meth[obj_name] = mt.__index
 	end
 end
-_pub.${object_name} = _M
 for obj_name,pub in pairs(_M) do
 	_pub[obj_name] = pub
 end
@@ -693,7 +692,11 @@ local function reg_object_function(self, func, object)
 	else
 		ffi_table = '_pub'
 	end
-	return ffi_table, name
+	local obj_table = ffi_table .. '.${object_name}.'
+	if object._rec_type == 'c_module' then
+		obj_table = '_M.'
+	end
+	return obj_table, ffi_table, name
 end
 
 local function add_source(rec, part, src, pos)
@@ -970,13 +973,13 @@ extends = function(self, rec, parent)
 			if val._is_method and not val.is_constructor then
 				gen_if_defs_code(val)
 				-- register base class's method with sub class
-				local ffi_table, name = reg_object_function(self, val, parent)
+				local obj_table, ffi_table, name = reg_object_function(self, val, parent)
 				-- write ffi code to remove registered base class method.
 				parent:write_part("ffi_src",
-				{ffi_table,'.${object_name}.', name, ' = nil\n'})
+				{obj_table, name, ' = nil\n'})
 				-- write ffi code to copy method from base class.
 				parent:write_part("ffi_extends",
-				{val.ffi_if_defs, ffi_table,'.${object_name}.',name,' = ',
+				{val.ffi_if_defs, obj_table,name,' = ',
 					ffi_table,'.',base.name,'.',name,'\n', val.ffi_endif})
 			end
 		end
@@ -1007,14 +1010,15 @@ c_function = function(self, rec, parent)
 	gen_if_defs_code(rec)
 
 	-- register method/function with object.
-	local ffi_table, name = reg_object_function(self, rec, parent)
+	local obj_table, ffi_table, name = reg_object_function(self, rec, parent)
+	rec.obj_table = obj_table
 	rec.ffi_table = ffi_table
 	rec.ffi_reg_name = name
 
 	-- generate FFI function
 	rec:write_part("ffi_pre",
 	{'-- method: ', name, '\n', rec.ffi_if_defs,
-		'function ',ffi_table,'.${object_name}.', name, '(',rec.ffi_params,')\n'})
+		'function ',obj_table, name, '(',rec.ffi_params,')\n'})
 end,
 c_function_end = function(self, rec, parent)
 	-- don't generate FFI bindings
@@ -1043,12 +1047,12 @@ c_function_end = function(self, rec, parent)
 	if rec.is_default_constructor then
 		rec:write_part("ffi_post",
 			{'register_default_constructor(_pub,"${object_name}",',
-			rec.ffi_table,'.${object_name}.', rec.ffi_reg_name ,')\n'})
+			rec.obj_table, rec.ffi_reg_name ,')\n'})
 	end
 	if rec.is__default_destructor and not rec._is_hidden and
 			not self._cur_module.disable__gc and not parent.disable__gc then
 		rec:write_part('ffi_post',
-			{'_priv.${object_name}.__gc = ', rec.ffi_table,'.${object_name}.', rec.name, '\n'})
+			{'_priv.${object_name}.__gc = ', rec.obj_table, rec.name, '\n'})
 	end
 
 	rec:vars_parts(ffi_parts)
