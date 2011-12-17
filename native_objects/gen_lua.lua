@@ -803,6 +803,12 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 	lua_pop(L, 2);                      /* drop metatable & methods */
 }
 
+static FUNC_UNUSED int lua_checktype_ref(lua_State *L, int _index, int _type) {
+	luaL_checktype(L,_index,_type);
+	lua_pushvalue(L,_index);
+	return luaL_ref(L, LUA_REGISTRYINDEX);
+}
+
 ]]
 
 -- templates for typed *_check/*_delete/*_push macros.
