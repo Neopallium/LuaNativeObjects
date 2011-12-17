@@ -1478,7 +1478,7 @@ extends = function(self, rec, parent)
 	-- add methods/fields/constants from base object
 	for name,val in pairs(base.name_map) do
 		-- make sure sub-class has not override name.
-		if parent.name_map[name] == nil then
+		if parent.name_map[name] == nil or parent.name_map[name] == val then
 			parent.name_map[name] = val
 			if val._is_method and not val.is_constructor then
 				parent.functions[name] = val
