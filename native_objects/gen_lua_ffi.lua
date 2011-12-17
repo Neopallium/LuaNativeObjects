@@ -518,7 +518,7 @@ do
 	end
 
 	function obj_type_${object_name}_push(ptr, flags)
-		if flags then
+		if flags ~= 0 then
 			local id = obj_ptr_to_id(ptr)
 			obj_flags[id] = flags
 			ffi.gc(ptr, obj_mt.__gc)
@@ -573,7 +573,7 @@ do
 		-- check weak refs
 		local old_ptr = objects[id]
 		if old_ptr then return old_ptr end
-		if flags then
+		if flags ~= 0 then
 			obj_flags[id] = flags
 			ffi.gc(ptr, obj_mt.__gc)
 		end
