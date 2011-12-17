@@ -279,15 +279,18 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local obj_mt = _priv.${object_name}
-	local obj_flags = {}
-
 	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
 		struct ${object_name}_t {
 			const ${object_name} _wrapped_val;
 		};
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
+
+	local obj_mt = _priv.${object_name}
+	local obj_type = obj_mt['.type']
+	local obj_ctype = ffi.typeof("${object_name}_t")
+	_type_names.${object_name} = tostring(obj_ctype)
+	local obj_flags = {}
 
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
@@ -302,9 +305,8 @@ do
 		return val
 	end
 
-	local new_obj = ffi.typeof("${object_name}_t")
 	function obj_type_${object_name}_push(val)
-		local obj = new_obj(val)
+		local obj = obj_ctype(val)
 		local id = obj_to_id(obj)
 		obj_flags[id] = true
 		return obj
@@ -320,14 +322,13 @@ do
 	end
 
 	-- type checking function for C API.
-	local obj_type = obj_mt['.type']
 	_priv[obj_type] = function(obj)
 		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
 		return nil
 	end
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr)
-		return obj_type_${object_name}_push(ptr[0])
+		return obj_type_${object_name}_push(ffi.cast("${object_name} *", ptr)[0])
 	end
 
 end
@@ -340,6 +341,8 @@ local obj_type_${object_name}_push
 
 do
 	local obj_mt = _priv.${object_name}
+	local obj_type = obj_mt['.type']
+	local obj_ctype = ffi.typeof("${object_name} *")
 	local obj_flags = {}
 
 	function obj_type_${object_name}_check(ptr)
@@ -375,14 +378,13 @@ do
 	end
 
 	-- type checking function for C API.
-	local obj_type = obj_mt['.type']
 	_priv[obj_type] = function(ptr)
 		if ffi.istype("${object_name} *", ptr) then return ptr end
 		return nil
 	end
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr)
-		return obj_type_${object_name}_push(ptr[0])
+		return obj_type_${object_name}_push(ffi.cast("${object_name} *", ptr)[0])
 	end
 
 end
@@ -395,6 +397,8 @@ local obj_type_${object_name}_push
 
 do
 	local obj_mt = _priv.${object_name}
+	local obj_type = obj_mt['.type']
+	local obj_ctype = ffi.typeof("${object_name}")
 	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 
 	function obj_type_${object_name}_check(obj)
@@ -420,7 +424,6 @@ do
 	end
 
 	-- type checking function for C API.
-	local obj_type = obj_mt['.type']
 	_priv[obj_type] = function(obj)
 		if ffi.istype("${object_name}", obj) then return obj end
 		return nil
@@ -441,15 +444,17 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local obj_mt = _priv.${object_name}
-	local obj_flags = {}
-
 	ffi_safe_cdef("${object_name}_simple_wrapper", [=[
 		struct ${object_name}_t {
 			const ${object_name} _wrapped_val;
 		};
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
+
+	local obj_mt = _priv.${object_name}
+	local obj_type = obj_mt['.type']
+	local obj_ctype = ffi.typeof("${object_name}_t")
+	local obj_flags = {}
 
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
@@ -464,9 +469,8 @@ do
 		return val, flags
 	end
 
-	local new_obj = ffi.typeof("${object_name}_t")
 	function obj_type_${object_name}_push(val, flags)
-		local obj = new_obj(val)
+		local obj = obj_ctype(val)
 		local id = obj_ptr_to_id(obj)
 		obj_flags[id] = flags
 		return obj
@@ -482,7 +486,6 @@ do
 	end
 
 	-- type checking function for C API.
-	local obj_type = obj_mt['.type']
 	_priv[obj_type] = function(obj)
 		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
 		return nil
@@ -502,10 +505,20 @@ local obj_type_${object_name}_push
 
 do
 	local obj_mt = _priv.${object_name}
+	local obj_type = obj_mt['.type']
+	local obj_ctype = ffi.typeof("${object_name} *")
+	_type_names.${object_name} = tostring(obj_ctype)
 	local obj_flags = {}
 
 	function obj_type_${object_name}_check(ptr)
-		return ptr
+		-- if ptr is nil or is the correct type, then just return it.
+		if not ptr or ffi.istype("${object_name} *", ptr) then return ptr end
+		-- check if it is a compatible type.
+		local ctype = tostring(ffi.typeof(ptr))
+		if _obj_subs.${object_name}[ctype] then
+			return ffi.cast("${object_name} *", ptr)
+		end
+		return error("Expected '${object_name} *'", 2)
 	end
 
 	function obj_type_${object_name}_delete(ptr)
@@ -532,7 +545,6 @@ do
 	end
 
 	-- type checking function for C API.
-	local obj_type = obj_mt['.type']
 	_priv[obj_type] = function(ptr)
 		if ffi.istype("${object_name} *", ptr) then return ptr end
 		return nil
@@ -552,11 +564,21 @@ local obj_type_${object_name}_push
 
 do
 	local obj_mt = _priv.${object_name}
+	local obj_type = obj_mt['.type']
+	local obj_ctype = ffi.typeof("${object_name} *")
+	_type_names.${object_name} = tostring(obj_ctype)
 	local objects = setmetatable({}, {__mode = "v"})
 	local obj_flags = {}
 
 	function obj_type_${object_name}_check(ptr)
-		return ptr
+		-- if ptr is nil or is the correct type, then just return it.
+		if not ptr or ffi.istype("${object_name} *", ptr) then return ptr end
+		-- check if it is a compatible type.
+		local ctype = tostring(ffi.typeof(ptr))
+		if _obj_subs.${object_name}[ctype] then
+			return ffi.cast("${object_name} *", ptr)
+		end
+		return error("Expected '${object_name} *'", 2)
 	end
 
 	function obj_type_${object_name}_delete(ptr)
@@ -587,7 +609,6 @@ do
 	end
 
 	-- type checking function for C API.
-	local obj_type = obj_mt['.type']
 	_priv[obj_type] = function(ptr)
 		if ffi.istype("${object_name} *", ptr) then return ptr end
 		return nil
@@ -636,9 +657,15 @@ local ffi_obj_type_check = {
 local ffi_module_template = [[
 local _pub = {}
 local _meth = {}
+local _push = {}
+local _obj_subs = {}
+local _type_names = {}
 for obj_name,mt in pairs(_priv) do
-	if type(mt) == 'table' and mt.__index then
-		_meth[obj_name] = mt.__index
+	if type(mt) == 'table' then
+		_obj_subs[obj_name] = {}
+		if mt.__index then
+			_meth[obj_name] = mt.__index
+		end
 	end
 end
 for obj_name,pub in pairs(_M) do
@@ -744,8 +771,8 @@ object = function(self, rec, parent)
 		ud_type = ud_type .. '_weak'
 	end
 	rec.ud_type = ud_type
-	-- create _ffi_check function
-	rec._ffi_check = ffi_obj_type_check[ud_type]
+	-- create _ffi_check_fast function
+	rec._ffi_check_fast = ffi_obj_type_check[ud_type]
 end,
 }
 
@@ -904,10 +931,11 @@ object = function(self, rec, parent)
 end,
 object_end = function(self, rec, parent)
 	-- check for dyn_caster
-	local dyn_caster = 'NULL'
+	local dyn_caster = ''
 	if rec.has_dyn_caster then
-		error("FFI-bindings doesn't support dynamic casters.")
-		dyn_caster = rec.has_dyn_caster.dyn_caster_name
+		dyn_caster = "  local cast_obj = " .. rec.has_dyn_caster.dyn_caster_name .. [[(obj)
+  if cast_obj then return cast_obj end
+]]
 	end
 	-- register metatable for FFI cdata type.
 	if not rec.is_package then
@@ -919,7 +947,9 @@ object_end = function(self, rec, parent)
 		local c_metatype = ffi_obj_metatype[rec.ud_type]
 		if c_metatype then
 			rec:write_part("ffi_src",{
-				'ffi.metatype("',c_metatype,'", _priv.${object_name})\n'})
+				'_push.${object_name} = obj_type_${object_name}_push\n',
+				'ffi.metatype("',c_metatype,'", _priv.${object_name})\n',
+		})
 		end
 	end
 	-- end object's FFI source
@@ -992,6 +1022,11 @@ extends = function(self, rec, parent)
 	local base = rec.base
 	local base_cast = 'NULL'
 	if base == nil then return end
+	-- add sub-classes to base class list of subs.
+	parent:write_part("ffi_extends",
+		{'-- add sub-class to base classes list of subs\n',
+		 '_obj_subs.', base.name, '[_type_names.${object_name}] = true\n',
+		})
 	-- add methods/fields/constants from base object
 	parent:write_part("ffi_src",
 		{'-- Clear out methods from base class, to allow ffi-based methods from base class\n'})
@@ -1023,8 +1058,41 @@ end,
 callback_func_end = function(self, rec, parent)
 end,
 dyn_caster = function(self, rec, parent)
+	local vtab = rec.ffi_value_table or ''
+	if vtab ~= '' then
+		vtab = '_pub.' .. vtab .. '.'
+	end
+	rec.dyn_caster_name = 'dyn_caster_' .. parent.name
+	-- generate lookup table for switch based caster.
+	if rec.caster_type == 'switch' then
+		local lookup_table = { "local dyn_caster_${object_name}_lookup = {\n" }
+		local selector = ''
+		if rec.value_field then
+			selector = 'obj.' .. rec.value_field
+		elseif rec.value_function then
+			selector = "C." .. rec.value_function .. '(obj)'
+		else
+			error("Missing switch value for dynamic caster.")
+		end
+		rec:write_part('src', {
+			'  local sub_type = dyn_caster_${object_name}_lookup[', selector, ']\n',
+			'  local type_push = _push[sub_type or 0]\n',
+			'  if type_push then return type_push(obj) end\n',
+			'  return nil\n',
+		})
+		-- add cases for each sub-object type.
+		for val,sub in pairs(rec.value_map) do
+			lookup_table[#lookup_table + 1] = '[' .. vtab .. val .. '] = "' ..
+				sub._obj_type_name .. '",\n'
+		end
+		lookup_table[#lookup_table + 1] = '}\n\n'
+		parent:write_part("ffi_obj_type", lookup_table)
+	end
 end,
 dyn_caster_end = function(self, rec, parent)
+	-- append custom dyn caster code
+	parent:write_part("ffi_obj_type",
+		{"local function dyn_caster_${object_name}(obj)\n", rec:dump_parts{ "src" }, "end\n\n" })
 end,
 c_function = function(self, rec, parent)
 	rec:add_var('object_name', parent.name)

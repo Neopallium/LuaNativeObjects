@@ -207,12 +207,24 @@ process_records{
 			if flags == nil then flags = '0' end
 			return '  '..type_name..'_push(L, ${'..var.name..'}, ' .. flags .. ');\n'
 		end
+		rec._ffi_check = function(self, var)
+			if not rec.subs then
+				-- no sub-classes
+				return rec._ffi_check_fast(self, var)
+			end
+			-- has sub-classes do extra casting if needed.
+			if var.is_this then
+				return 'local ${' .. var.name .. '} = '..type_name..'_check(self)\n'
+			end
+			local name = '${' .. var.name .. '}'
+			return name .. ' = '..type_name..'_check('..name..')\n'
+		end
 		rec._ffi_opt = function(self, var)
 			if var.is_this then
 				return 'local ${' .. var.name .. '} = '..type_name..'_check(self)\n'
 			end
 			local name = '${' .. var.name .. '}'
-			return '' .. name .. ' = '..name..' and '..type_name..'_check('..name..') or nil\n'
+			return name .. ' = '..name..' and '..type_name..'_check('..name..') or nil\n'
 		end
 		rec._ffi_delete = function(self, var, has_flags)
 			if not has_flags then
