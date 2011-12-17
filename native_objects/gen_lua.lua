@@ -1603,6 +1603,7 @@ callback_func_end = function(self, rec, parent)
 	rec:write_part("vars", {'\n  ', rec:_push('wrap->' .. rec.ref_field),})
 	-- call lua callback function.
 	rec:write_part("src", {'  lua_call(L, ', rec.cb_ins, ', ', rec.cb_outs , ');\n'})
+	rec:write_part("post", {'  lua_pop(L, ', rec.cb_outs , ');\n'})
 	-- get return value from lua function.
 	local ret_out = rec.ret_out
 	if ret_out then
