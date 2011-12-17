@@ -665,6 +665,17 @@ end
 end
 end
 
+function c_macro_method_call(ret)
+	return function (cfunc)
+	return function (params)
+	local rec = c_method_call(ret)(cfunc)(params)
+	rec.ffi_need_wrapper = "c_wrap"
+	rec.is_macro_call = true
+	return rec
+end
+end
+end
+
 function callback_type(name)
 	return function (return_type)
 	return function (params)
