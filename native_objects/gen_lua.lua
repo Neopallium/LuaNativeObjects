@@ -444,6 +444,7 @@ static FUNC_UNUSED void obj_udata_luapush_weak(lua_State *L, void *obj, obj_type
 	lua_pushlightuserdata(L, type);
 	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
 	if(nobj_ffi_support_enabled_hint && lua_isfunction(L, -1)) {
+		lua_remove(L, -2);
 		/* call special FFI "void *" to FFI object convertion function. */
 		lua_pushlightuserdata(L, obj);
 		lua_pushinteger(L, flags);
