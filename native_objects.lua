@@ -1053,7 +1053,7 @@ local function process_module_file(file)
 		else
 			assert("un-supported callback state var: " .. rec.state_var)
 		end
-		container:add_record(cb_state)
+		container:insert_record(cb_state, 1)
 		-- create callback_func instance.
 		local cb_func = callback_func(rec.c_type)(rec.name)
 		cb_state:add_record(cb_func)
@@ -1252,6 +1252,7 @@ local function process_module_file(file)
 		-- add callback to parent's callback list.
 		parent.callbacks[rec.ref_field] = rec
 		local src={"static "}
+		local typedef={"typedef "}
 		-- convert return type into "cb_out" if it's not a "void" type.
 		local ret = func_type.ret
 		if ret ~= "void" then
@@ -1259,25 +1260,34 @@ local function process_module_file(file)
 			rec:add_record(rec.ret_out)
 		end
 		src[#src+1] = ret .. " "
+		typedef[#typedef+1] = ret .. " "
 		-- append c function to call.
 		rec.c_func_name = parent.base_type .. "_".. rec.ref_field .. "_cb"
 		src[#src+1] = rec.c_func_name .. "("
+		typedef[#typedef+1] = "(*" .. rec.c_type .. ")("
 		-- convert params to "cb_in" records.
 		local params = func_type.params
+		local vars = {}
 		for i=1,#params,2 do
 			local c_type = params[i]
 			local name = params[i + 1]
 			if i > 1 then
 				src[#src+1] = ", "
+				typedef[#typedef+1] = ", "
 			end
 			-- add cb_in to this rec.
 			local v_in = cb_in{ c_type, name}
 			rec:add_record(v_in)
-			src[#src+1] = c_type .. " ${" .. v_in.name .. "}" 
+			src[#src+1] = c_type .. " ${" .. v_in.name .. "}"
+			typedef[#typedef+1] = c_type .. " " .. v_in.name
+			vars[#vars+1] = "${" .. v_in.name .. "}"
 		end
 		src[#src+1] = ")"
+		typedef[#typedef+1] = ");"
 		-- save callback func decl.
 		rec.c_func_decl = table.concat(src)
+		rec.c_func_typedef = table.concat(typedef)
+		rec.param_vars = table.concat(vars, ', ')
 	end,
 	var_in = function(self, rec, parent)
 		parent:add_variable(rec)
