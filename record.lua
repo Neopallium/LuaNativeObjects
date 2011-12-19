@@ -169,9 +169,9 @@ end,
 add_var = function(self, key, value)
 	self._vars[key] = value
 end,
-add_rec_var = function(self, rec, name, vname)
+add_rec_var = function(self, rec, name, vname, idx)
 	local name = name or rec.name
-	local idx = rec._rec_idx
+	local idx = idx or rec._rec_idx
 	self._vars[name] = vname or format_variable(name, idx)
 	self._vars[name .. "::idx"] = idx
 end,
