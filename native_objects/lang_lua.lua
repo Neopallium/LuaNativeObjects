@@ -118,11 +118,9 @@ process_records{
 				end
 				rec._ffi_push = function(self, var)
 					if var.has_length then
-						return
-						'((nil ~= ${' .. var.name .. '}) and ' ..
-						'ffi.string(${' .. var.name .. '},${' .. var.name .. '_len}))'
+						return 'ffi_string_len(${' .. var.name .. '},${' .. var.name .. '_len})'
 					end
-					return '((nil ~= ${' .. var.name .. '}) and ffi.string(${' .. var.name .. '}))'
+					return 'ffi_string(${' .. var.name .. '})'
 				end
 				rec._ffi_check = function(self, var)
 					return 'local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'

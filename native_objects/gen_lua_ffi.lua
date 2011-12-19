@@ -159,6 +159,20 @@ local function ffi_load(name, global)
 	return assert(ffi_safe_load(name, global))
 end
 
+local function ffi_string(ptr)
+	if ptr ~= nil then
+		return ffi.string(ptr)
+	end
+	return nil
+end
+
+local function ffi_string_len(ptr, len)
+	if ptr ~= nil then
+		return ffi.string(ptr, len)
+	end
+	return nil
+end
+
 local error = error
 local type = type
 local tonumber = tonumber
@@ -1392,8 +1406,9 @@ var_out = function(self, rec, parent)
 	end
 	-- if the variable's type has a default value, then initialize the variable.
 	local init = ''
-	if var_type.default then
-		init = ' = ' .. tostring(var_type.default)
+	local default = var_type.default
+	if default and default ~= 'NULL' then
+		init = ' = ' .. tostring(default)
 	elseif var_type.userdata_type == 'embed' then
 		init = ' = ffi.new("' .. var_type.name .. '")'
 	end
