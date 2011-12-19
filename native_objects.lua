@@ -1099,6 +1099,7 @@ local function process_module_file(file)
 	--
 	-- Create FFI-wrappers for inline/macro calls
 	--
+	local ffi_wrappers = {}
 	process_records{
 	c_call = function(self, rec, parent)
 		if not rec.ffi_need_wrapper then
@@ -1125,8 +1126,9 @@ local function process_module_file(file)
 		end
 		-- build C call statement.
 		local call = {}
+		local cfunc_name = rec.cfunc
 		call[#call+1] = ret
-		call[#call+1] = rec.cfunc
+		call[#call+1] = cfunc_name
 		-- process parameters.
 		local params = {}
 		local list = rec.params
@@ -1158,18 +1160,30 @@ local function process_module_file(file)
 		-- convert 'params' to string.
 		params = tconcat(params)
 		call = tconcat(call)
-		-- create wrapper function
+		-- get prefix
 		local export_prefix = ""
 		if rec.ffi_need_wrapper == 'c_wrap' then
 			export_prefix = "ffi_wrapper_"
+		end
+		rec.ffi_export_prefix = export_prefix
+		-- check for re-definitions or duplicates.
+		local cdef = ret_type .. " " .. export_prefix .. cfunc_name .. params
+		local old_cdef = ffi_wrappers[cfunc_name]
+		if old_cdef == cdef then
+			return -- duplicate, don't need to create a new wrapper.
+		elseif old_cdef then
+			error("Re-definition of FFI wrapper cdef: " .. cdef)
+		end
+		ffi_wrappers[cfunc_name] = cdef
+		-- create wrapper function
+		if rec.ffi_need_wrapper == 'c_wrap' then
 			object:add_record(c_source("src")({
 			"\n/* FFI wrapper for inline/macro call */\n",
-			"static ", ret_type, " ", export_prefix, rec.cfunc, params, " {\n",
+			"static ", cdef, " {\n",
 			call,
 			"}\n",
 			}))
 		end
-		rec.ffi_export_prefix = export_prefix
 		object:add_record(ffi_export_function(ret_type)(export_prefix .. rec.cfunc)(params))
 	end,
 	}
