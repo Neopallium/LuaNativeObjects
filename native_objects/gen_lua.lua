@@ -114,19 +114,26 @@ typedef int bool;
 #define assert_obj_type(type, obj)
 #endif
 
-#ifndef obj_type_free
+void *${nobj_realloc}(void *ptr, size_t osize, size_t nsize);
+
+void *nobj_realloc(void *ptr, size_t osize, size_t nsize) {
+	(void)osize;
+	if(0 == nsize) {
+		free(ptr);
+		return NULL;
+	}
+	return realloc(ptr, nsize);
+}
+
 #define obj_type_free(type, obj) do { \
 	assert_obj_type(type, obj); \
-	free((obj)); \
+	${nobj_realloc}((obj), sizeof(type), 0); \
 } while(0)
-#endif
 
-#ifndef obj_type_new
 #define obj_type_new(type, obj) do { \
 	assert_obj_type(type, obj); \
-	(obj) = malloc(sizeof(type)); \
+	(obj) = ${nobj_realloc}(NULL, 0, sizeof(type)); \
 } while(0)
-#endif
 
 typedef struct obj_type obj_type;
 
@@ -1132,6 +1139,7 @@ c_module = function(self, rec, parent)
 	rec:add_var('module_c_name', module_c_name)
 	rec:add_var('module_name', rec.name)
 	rec:add_var('object_name', rec.name)
+	rec:add_var('nobj_realloc', rec.realloc or 'nobj_realloc')
 	self._cur_module = rec
 	self._modules_out[rec.name] = rec
 	rec:write_part("typedefs", obj_udata_types)
@@ -1209,8 +1217,9 @@ c_module_end = function(self, rec, parent)
 		"function_regs", "methods_regs", "metas_regs", "base_regs", "field_regs", "const_regs"}
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = { "defines", "funcdefs", "reg_sub_modules", "submodule_regs", "submodule_libs",
-		"helper_funcs", "extra_code", "methods", "reg_arrays", "luaopen_defs", "luaopen"}
+	local parts = { "defines", "typedefs", "funcdefs", "reg_sub_modules", "submodule_regs",
+		"submodule_libs", "helper_funcs", "extra_code", "methods", "reg_arrays", "luaopen_defs",
+		"luaopen"}
 	rec:vars_parts(parts)
 
 	self._cur_module = nil
