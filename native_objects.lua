@@ -845,7 +845,7 @@ function ffi_load(name)
 			end
 		end
 		off = off + 1; src[off] = '}\n'
-		off = off + 1; src[off] = 'local C = ffi_load(os_lib_table[ffi.os]'
+		off = off + 1; src[off] = 'C = ffi_load(os_lib_table[ffi.os]'
 		if type(default_lib) == 'string' then
 			off = off + 1; src[off] = ' or "'
 			off = off + 1; src[off] = default_lib
@@ -860,7 +860,7 @@ function ffi_load(name)
 	return function (global)
 		if global == nil then global = false end
 		global = tostring(global)
-		local src = 'local C = ffi_load("' .. name .. '",' .. global .. ')\n'
+		local src = 'C = ffi_load("' .. name .. '",' .. global .. ')\n'
 		return ffi_source("ffi_src")(src)
 	end
 end

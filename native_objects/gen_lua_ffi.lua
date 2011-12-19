@@ -203,6 +203,7 @@ end
 
 local _M, _priv, reg_table = ...
 local REG_OBJECTS_AS_GLOBALS = false
+local C = ffi.C
 
 local OBJ_UDATA_FLAG_OWN		= 1
 
@@ -809,7 +810,7 @@ c_module = function(self, rec, parent)
 			global = 'true'
 		end
 		rec:write_part("ffi_typedef", {[[
-local C = ffi_load_cmodule("${module_c_name}", ]], global ,[[)
+C = ffi_load_cmodule("${module_c_name}", ]], global ,[[)
 
 ]]})
 	end
