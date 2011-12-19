@@ -1612,16 +1612,23 @@ callback_func_end = function(self, rec, parent)
 	rec:write_part("vars", {'\n  ', rec:_push('wrap->' .. rec.ref_field),})
 	-- call lua callback function.
 	rec:write_part("pre_src", {
-	'  if(lua_pcall(L, ', rec.cb_ins, ', ', rec.cb_outs , ', 0)) {\n  ',
+	'  if(lua_pcall(L, ', rec.cb_ins, ', ', rec.cb_outs , ', 0)) {\n',
 	})
+	-- get default for function return value.
+	local ret_out = rec.ret_out
+	local func_rc = ''
+	if ret_out then
+		local var_type = ret_out.c_type_rec
+		func_rc = var_type.default or ''
+	end
 	rec:write_part("post_src", {
 	'    fprintf(stdout, "CALLBACK Error: %s\\n", lua_tostring(L, -1));\n',
 	'    lua_pop(L, 1);\n',
+	'    return ', func_rc,';\n',
 	'  }\n',
 	})
 	rec:write_part("post", {'  lua_pop(L, ', rec.cb_outs , ');\n'})
 	-- get return value from lua function.
-	local ret_out = rec.ret_out
 	if ret_out then
 		rec:write_part("post", {'  return ${', ret_out.name , '};\n'})
 	end
@@ -1904,7 +1911,7 @@ cb_in = function(self, rec, parent)
 	end
 end,
 cb_out = function(self, rec, parent)
-	parent:add_rec_var(rec)
+	parent:add_rec_var(rec, 'ret', 'ret', -1)
 	parent.cb_outs = parent.cb_outs + 1
 	local var_type = rec.c_type_rec
 	parent:write_part("vars",

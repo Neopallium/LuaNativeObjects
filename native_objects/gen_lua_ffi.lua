@@ -1114,7 +1114,10 @@ callback_func_end = function(self, rec, parent)
 	})
 	-- generate code for return value from lua function.
 	local ret_out = rec.ret_out
+	local func_rc = ''
 	if ret_out then
+		local var_type = ret_out.c_type_rec
+		func_rc = var_type.default or ''
 		rec:write_part("ffi_post", {'  return ret\n'})
 	end
 	-- call lua callback function.
@@ -1122,11 +1125,11 @@ callback_func_end = function(self, rec, parent)
 	cb_params = cb_params:gsub(", $","")
 	rec:write_part("ffi_pre_src", {
 	'  local status, ret = pcall(wrap.' .. rec.ref_field,', ', cb_params,')\n',
-	'  if not status then\n  ',
+	'  if not status then\n',
 	})
 	rec:write_part("ffi_post_src", {
 	'    print("CALLBACK Error:", ret)\n',
-	'    ret = nil\n',
+	'    return ', func_rc ,'\n',
 	'  end\n',
 	})
 	rec:write_part("ffi_post", {'end)\n\n'})
