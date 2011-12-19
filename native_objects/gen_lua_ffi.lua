@@ -248,6 +248,7 @@ int memcmp(const void *s1, const void *s2, size_t n);
 
 local nobj_callback_states = {}
 local nobj_weak_objects = setmetatable({}, {__mode = "v"})
+local nobj_obj_flags = {}
 
 local function obj_ptr_to_id(ptr)
 	return tonumber(ffi.cast('uintptr_t', ptr))
@@ -301,7 +302,6 @@ do
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name}_t")
 	_type_names.${object_name} = tostring(obj_ctype)
-	local obj_flags = {}
 
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
@@ -309,17 +309,17 @@ do
 
 	function obj_type_${object_name}_delete(obj)
 		local id = obj_to_id(obj)
-		local valid = obj_flags[id]
+		local valid = nobj_obj_flags[id]
 		if not valid then return nil end
 		local val = obj._wrapped_val
-		obj_flags[id] = nil
+		nobj_obj_flags[id] = nil
 		return val
 	end
 
 	function obj_type_${object_name}_push(val)
 		local obj = obj_ctype(val)
 		local id = obj_to_id(obj)
-		obj_flags[id] = true
+		nobj_obj_flags[id] = true
 		return obj
 	end
 
@@ -354,7 +354,6 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name} *")
-	local obj_flags = {}
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr
@@ -362,10 +361,10 @@ do
 
 	function obj_type_${object_name}_delete(ptr)
 		local id = obj_ptr_to_id(ptr)
-		local flags = obj_flags[id]
+		local flags = nobj_obj_flags[id]
 		if not flags then return ptr end
 		ffi.gc(ptr, nil)
-		obj_flags[id] = nil
+		nobj_obj_flags[id] = nil
 		return ptr
 	end
 
@@ -373,7 +372,7 @@ do
 		-- has __gc metamethod
 		function obj_type_${object_name}_push(ptr)
 			local id = obj_ptr_to_id(ptr)
-			obj_flags[id] = true
+			nobj_obj_flags[id] = true
 			return ffi.gc(ptr, obj_mt.__gc)
 		end
 	else
@@ -465,7 +464,6 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name}_t")
-	local obj_flags = {}
 
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
@@ -473,17 +471,17 @@ do
 
 	function obj_type_${object_name}_delete(obj)
 		local id = obj_ptr_to_id(obj)
-		local flags = obj_flags[id]
+		local flags = nobj_obj_flags[id]
 		local val = obj._wrapped_val
 		if not flags then return nil, 0 end
-		obj_flags[id] = nil
+		nobj_obj_flags[id] = nil
 		return val, flags
 	end
 
 	function obj_type_${object_name}_push(val, flags)
 		local obj = obj_ctype(val)
 		local id = obj_ptr_to_id(obj)
-		obj_flags[id] = flags
+		nobj_obj_flags[id] = flags
 		return obj
 	end
 
@@ -519,7 +517,6 @@ do
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name} *")
 	_type_names.${object_name} = tostring(obj_ctype)
-	local obj_flags = {}
 
 	function obj_type_${object_name}_check(ptr)
 		-- if ptr is nil or is the correct type, then just return it.
@@ -534,17 +531,17 @@ do
 
 	function obj_type_${object_name}_delete(ptr)
 		local id = obj_ptr_to_id(ptr)
-		local flags = obj_flags[id]
+		local flags = nobj_obj_flags[id]
 		if not flags then return nil, 0 end
 		ffi.gc(ptr, nil)
-		obj_flags[id] = nil
+		nobj_obj_flags[id] = nil
 		return ptr, flags
 	end
 
 	function obj_type_${object_name}_push(ptr, flags)
 		if flags ~= 0 then
 			local id = obj_ptr_to_id(ptr)
-			obj_flags[id] = flags
+			nobj_obj_flags[id] = flags
 			ffi.gc(ptr, obj_mt.__gc)
 		end
 		return ptr
@@ -578,7 +575,6 @@ do
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name} *")
 	_type_names.${object_name} = tostring(obj_ctype)
-	local obj_flags = {}
 
 	function obj_type_${object_name}_check(ptr)
 		-- if ptr is nil or is the correct type, then just return it.
@@ -593,10 +589,10 @@ do
 
 	function obj_type_${object_name}_delete(ptr)
 		local id = obj_ptr_to_id(ptr)
-		local flags = obj_flags[id]
+		local flags = nobj_obj_flags[id]
 		if not flags then return nil, 0 end
 		ffi.gc(ptr, nil)
-		obj_flags[id] = nil
+		nobj_obj_flags[id] = nil
 		return ptr, flags
 	end
 
@@ -606,7 +602,7 @@ do
 		local old_ptr = nobj_weak_objects[id]
 		if old_ptr then return old_ptr end
 		if flags ~= 0 then
-			obj_flags[id] = flags
+			nobj_obj_flags[id] = flags
 			ffi.gc(ptr, obj_mt.__gc)
 		end
 		nobj_weak_objects[id] = ptr
