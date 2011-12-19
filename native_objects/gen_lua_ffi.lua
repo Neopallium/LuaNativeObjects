@@ -247,6 +247,7 @@ int memcmp(const void *s1, const void *s2, size_t n);
 ]])
 
 local nobj_callback_states = {}
+local nobj_weak_objects = setmetatable({}, {__mode = "v"})
 
 local function obj_ptr_to_id(ptr)
 	return tonumber(ffi.cast('uintptr_t', ptr))
@@ -577,7 +578,6 @@ do
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name} *")
 	_type_names.${object_name} = tostring(obj_ctype)
-	local objects = setmetatable({}, {__mode = "v"})
 	local obj_flags = {}
 
 	function obj_type_${object_name}_check(ptr)
@@ -603,13 +603,13 @@ do
 	function obj_type_${object_name}_push(ptr, flags)
 		local id = obj_ptr_to_id(ptr)
 		-- check weak refs
-		local old_ptr = objects[id]
+		local old_ptr = nobj_weak_objects[id]
 		if old_ptr then return old_ptr end
 		if flags ~= 0 then
 			obj_flags[id] = flags
 			ffi.gc(ptr, obj_mt.__gc)
 		end
-		objects[id] = ptr
+		nobj_weak_objects[id] = ptr
 		return ptr
 	end
 
