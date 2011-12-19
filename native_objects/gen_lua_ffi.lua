@@ -345,13 +345,13 @@ do
 	end
 
 	function obj_mt.__eq(val1, val2)
-		if not ffi.istype("${object_name}_t", val2) then return false end
+		if not ffi.istype(obj_ctype, val2) then return false end
 		return (val1._wrapped_val == val2._wrapped_val)
 	end
 
 	-- type checking function for C API.
 	_priv[obj_type] = function(obj)
-		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
+		if ffi.istype(obj_ctype, obj) then return obj._wrapped_val end
 		return nil
 	end
 	-- push function for C API.
@@ -406,12 +406,12 @@ do
 
 	-- type checking function for C API.
 	_priv[obj_type] = function(ptr)
-		if ffi.istype("${object_name} *", ptr) then return ptr end
+		if ffi.istype(obj_ctype, ptr) then return ptr end
 		return nil
 	end
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr)
-		return obj_type_${object_name}_push(ffi.cast("${object_name} *", ptr)[0])
+		return obj_type_${object_name}_push(ffi.cast(obj_ctype, ptr)[0])
 	end
 
 end
@@ -446,19 +446,19 @@ do
 	end
 
 	function obj_mt.__eq(val1, val2)
-		if not ffi.istype("${object_name}", val2) then return false end
-		assert(ffi.istype("${object_name}", val1), "expected ${object_name}")
+		if not ffi.istype(obj_type, val2) then return false end
+		assert(ffi.istype(obj_type, val1), "expected ${object_name}")
 		return (C.memcmp(val1, val2, ${object_name}_sizeof) == 0)
 	end
 
 	-- type checking function for C API.
 	_priv[obj_type] = function(obj)
-		if ffi.istype("${object_name}", obj) then return obj end
+		if ffi.istype(obj_type, obj) then return obj end
 		return nil
 	end
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr)
-		local obj = ffi.new("${object_name}")
+		local obj = obj_ctype()
 		ffi.copy(obj, ptr, ${object_name}_sizeof);
 		return obj
 	end
@@ -510,13 +510,13 @@ do
 	end
 
 	function obj_mt.__eq(val1, val2)
-		if not ffi.istype("${object_name}_t", val2) then return false end
+		if not ffi.istype(obj_ctype, val2) then return false end
 		return (val1._wrapped_val == val2._wrapped_val)
 	end
 
 	-- type checking function for C API.
 	_priv[obj_type] = function(obj)
-		if ffi.istype("${object_name}_t", obj) then return obj._wrapped_val end
+		if ffi.istype(obj_ctype, obj) then return obj._wrapped_val end
 		return nil
 	end
 	-- push function for C API.
@@ -541,11 +541,12 @@ do
 
 	function obj_type_${object_name}_check(ptr)
 		-- if ptr is nil or is the correct type, then just return it.
-		if not ptr or ffi.istype("${object_name} *", ptr) then return ptr end
+		if not ptr or ffi.istype(obj_ctype, ptr) then return ptr end
 		-- check if it is a compatible type.
 		local ctype = tostring(ffi.typeof(ptr))
-		if _obj_subs.${object_name}[ctype] then
-			return ffi.cast("${object_name} *", ptr)
+		local bcaster = _obj_subs.${object_name}[ctype]
+		if bcaster then
+			return bcaster(ptr)
 		end
 		return error("Expected '${object_name} *'", 2)
 	end
@@ -575,12 +576,12 @@ ${dyn_caster}
 
 	-- type checking function for C API.
 	_priv[obj_type] = function(ptr)
-		if ffi.istype("${object_name} *", ptr) then return ptr end
+		if ffi.istype(obj_ctype, ptr) then return ptr end
 		return nil
 	end
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr, flags)
-		return obj_type_${object_name}_push(ffi.cast('${object_name} *',ptr), flags)
+		return obj_type_${object_name}_push(ffi.cast(obj_ctype,ptr), flags)
 	end
 
 end
@@ -600,11 +601,12 @@ do
 
 	function obj_type_${object_name}_check(ptr)
 		-- if ptr is nil or is the correct type, then just return it.
-		if not ptr or ffi.istype("${object_name} *", ptr) then return ptr end
+		if not ptr or ffi.istype(obj_ctype, ptr) then return ptr end
 		-- check if it is a compatible type.
 		local ctype = tostring(ffi.typeof(ptr))
-		if _obj_subs.${object_name}[ctype] then
-			return ffi.cast("${object_name} *", ptr)
+		local bcaster = _obj_subs.${object_name}[ctype]
+		if bcaster then
+			return bcaster(ptr)
 		end
 		return error("Expected '${object_name} *'", 2)
 	end
@@ -638,12 +640,12 @@ ${dyn_caster}
 
 	-- type checking function for C API.
 	_priv[obj_type] = function(ptr)
-		if ffi.istype("${object_name} *", ptr) then return ptr end
+		if ffi.istype(obj_ctype, ptr) then return ptr end
 		return nil
 	end
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr, flags)
-		return obj_type_${object_name}_push(ffi.cast('${object_name} *',ptr), flags)
+		return obj_type_${object_name}_push(ffi.cast(obj_ctype,ptr), flags)
 	end
 
 end
@@ -1084,11 +1086,6 @@ extends = function(self, rec, parent)
 	local base = rec.base
 	local base_cast = 'NULL'
 	if base == nil then return end
-	-- add sub-classes to base class list of subs.
-	parent:write_part("ffi_extends",
-		{'-- add sub-class to base classes list of subs\n',
-		 '_obj_subs.', base.name, '[_type_names.${object_name}] = true\n',
-		})
 	-- add methods/fields/constants from base object
 	parent:write_part("ffi_src",
 		{'-- Clear out methods from base class, to allow ffi-based methods from base class\n'})
@@ -1112,8 +1109,67 @@ extends = function(self, rec, parent)
 			end
 		end
 	end
+	-- base_caster: helper functions.
+	local function base_caster_name(class_name, base_name)
+		return 'base_cast_' .. class_name .. '_to_' .. base_name
+	end
+	local function create_base_caster(class, base, cast_type)
+		local base_cast = base_caster_name(class.name, base.name)
+		local caster_def = base.c_type .. ' nobj_ffi_' .. base_cast .. 
+			'(' .. class.c_type .. ' obj)'
+		if cast_type == 'direct' then
+			rec:write_part('ffi_src', {
+			'\n',
+			'-- add sub-class to base classes list of subs\n',
+			'_obj_subs.', base.name, '[_type_names.${object_name}] = function(obj)\n',
+			'  return ffi.cast(_ctypes.', base.name,',obj)\n',
+			'end\n\n',
+			})
+			return base_cast
+		end
+		-- add base_cast decl.
+		parent:write_part('ffi_cdef', {' ', caster_def, ';\n'})
+		-- start base_cast function.
+		if class.is_ptr then
+			rec:write_part('src', {
+			caster_def, ' {\n',
+			'  void *ptr = (void *)obj;\n',
+			'  ', base_cast, '(&ptr);\n',
+			'  return (',base.c_type,')ptr;\n',
+			'}\n\n',
+			})
+		else
+			rec:write_part('src', {
+			caster_def, ' {\n',
+			'  void *ptr = (void *)(uintptr_t)obj;\n',
+			'  ', base_cast, '(&ptr);\n',
+			'  return (',base.c_type,')(uintptr_t)ptr;\n',
+			'}\n\n',
+			})
+		end
+		-- add sub-classes to base class list of subs.
+		parent:write_part("ffi_extends",
+			{'-- add sub-class to base classes list of subs\n',
+			 '_obj_subs.', base.name, '[_type_names.${object_name}] = C.nobj_ffi_',base_cast,'\n',
+			})
+	end
+	-- add casters for all base-class's ancestors
+	for name,extend in pairs(base.extends) do
+		create_base_caster(parent, extend.base, extend.cast_type)
+	end
+	-- create caster to base type.
+	create_base_caster(parent, base, rec.cast_type)
 end,
 extends_end = function(self, rec, parent)
+	-- map in/out variables in c source.
+	local parts = {"src", "ffi_src"}
+	rec:vars_parts(parts)
+
+	-- append ffi wrapper function for base caster functions.
+	add_source(parent, "extra_code", rec:dump_parts("src"))
+
+	-- copy parts to parent
+	parent:copy_parts(rec, "ffi_src")
 end,
 callback_func = function(self, rec, parent)
 	rec.wrapped_type = parent.c_type
