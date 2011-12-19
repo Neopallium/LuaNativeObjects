@@ -1561,8 +1561,12 @@ extends = function(self, rec, parent)
 		rec:add_var('in_obj_type', parent.c_type)
 		rec:add_var('out_obj', 'out_obj')
 		rec:add_var('out_obj_type', base.c_type)
+		local to_obj = '*(${in_obj_type} *)*'
+		if not parent.is_ptr then
+			to_obj = '*(${in_obj_type} *)'
+		end
 		rec:write_part('src', {
-			'  ${in_obj_type} in_obj = *(${in_obj_type} *)*obj;\n',
+			'  ${in_obj_type} in_obj = ', to_obj, 'obj;\n',
 			'  ${out_obj_type} out_obj;\n',
 		})
 	end
@@ -1573,9 +1577,13 @@ extends = function(self, rec, parent)
 end,
 extends_end = function(self, rec, parent)
 	if rec.cast_type == 'custom' then
+		local to_ptr = '*(${out_obj_type} *)*'
+		if not rec.base.is_ptr then
+			to_ptr = '*(${out_obj_type} *)'
+		end
 		-- end caster function.
 		rec:write_part('src', {
-			'  *(${out_obj_type} *)*obj = out_obj;\n',
+			'  ',to_ptr,'obj = out_obj;\n',
 			'}\n\n'
 		})
 	end
