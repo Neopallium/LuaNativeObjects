@@ -302,6 +302,7 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name}_t")
+	_ctypes.${object_name} = obj_ctype
 	_type_names.${object_name} = tostring(obj_ctype)
 
 	function obj_type_${object_name}_check(obj)
@@ -355,6 +356,7 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name} *")
+	_ctypes.${object_name} = obj_ctype
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr
@@ -410,6 +412,7 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name}")
+	_ctypes.${object_name} = obj_ctype
 	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 
 	function obj_type_${object_name}_check(obj)
@@ -465,6 +468,7 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name}_t")
+	_ctypes.${object_name} = obj_ctype
 
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
@@ -517,6 +521,7 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name} *")
+	_ctypes.${object_name} = obj_ctype
 	_type_names.${object_name} = tostring(obj_ctype)
 
 	function obj_type_${object_name}_check(ptr)
@@ -540,6 +545,7 @@ do
 	end
 
 	function obj_type_${object_name}_push(ptr, flags)
+${dyn_caster}
 		if flags ~= 0 then
 			local id = obj_ptr_to_id(ptr)
 			nobj_obj_flags[id] = flags
@@ -575,6 +581,7 @@ do
 	local obj_mt = _priv.${object_name}
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name} *")
+	_ctypes.${object_name} = obj_ctype
 	_type_names.${object_name} = tostring(obj_ctype)
 
 	function obj_type_${object_name}_check(ptr)
@@ -602,6 +609,7 @@ do
 		-- check weak refs
 		local old_ptr = nobj_weak_objects[id]
 		if old_ptr then return old_ptr end
+${dyn_caster}
 		if flags ~= 0 then
 			nobj_obj_flags[id] = flags
 			ffi.gc(ptr, obj_mt.__gc)
@@ -667,6 +675,7 @@ local _meth = {}
 local _push = {}
 local _obj_subs = {}
 local _type_names = {}
+local _ctypes = {}
 for obj_name,mt in pairs(_priv) do
 	if type(mt) == 'table' then
 		_obj_subs[obj_name] = {}
@@ -941,11 +950,17 @@ object = function(self, rec, parent)
 end,
 object_end = function(self, rec, parent)
 	-- check for dyn_caster
-	local dyn_caster = ''
 	if rec.has_dyn_caster then
-		dyn_caster = "  local cast_obj = " .. rec.has_dyn_caster.dyn_caster_name .. [[(obj)
-  if cast_obj then return cast_obj end
-]]
+		local flags = ''
+		if rec.has_obj_flags then
+			flags = ', flags'
+		end
+		rec:add_var('dyn_caster', [[
+		local cast_obj = ]] .. rec.has_dyn_caster.dyn_caster_name .. [[(ptr]] .. flags .. [[)
+		if cast_obj then return cast_obj end
+]])
+	else
+		rec:add_var('dyn_caster', "")
 	end
 	-- register metatable for FFI cdata type.
 	if not rec.is_package then
@@ -1158,13 +1173,12 @@ dyn_caster = function(self, rec, parent)
 		rec:write_part('src', {
 			'  local sub_type = dyn_caster_${object_name}_lookup[', selector, ']\n',
 			'  local type_push = _push[sub_type or 0]\n',
-			'  if type_push then return type_push(obj) end\n',
+			'  if type_push then return type_push(ffi.cast(_ctypes[sub_type],obj), flags) end\n',
 			'  return nil\n',
 		})
 		-- add cases for each sub-object type.
 		for val,sub in pairs(rec.value_map) do
-			lookup_table[#lookup_table + 1] = '[' .. vtab .. val .. '] = "' ..
-				sub._obj_type_name .. '",\n'
+			lookup_table[#lookup_table + 1] = '[' .. vtab .. val .. '] = "' .. sub.name .. '",\n'
 		end
 		lookup_table[#lookup_table + 1] = '}\n\n'
 		parent:write_part("ffi_obj_type", lookup_table)
@@ -1173,7 +1187,7 @@ end,
 dyn_caster_end = function(self, rec, parent)
 	-- append custom dyn caster code
 	parent:write_part("ffi_obj_type",
-		{"local function dyn_caster_${object_name}(obj)\n", rec:dump_parts{ "src" }, "end\n\n" })
+		{"local function dyn_caster_${object_name}(obj, flags)\n", rec:dump_parts{ "src" }, "end\n\n" })
 end,
 c_function = function(self, rec, parent)
 	rec:add_var('object_name', parent.name)
