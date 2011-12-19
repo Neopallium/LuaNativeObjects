@@ -1289,6 +1289,7 @@ local function process_module_file(file)
 		-- convert params to "cb_in" records.
 		local params = func_type.params
 		local vars = {}
+		local idx=1
 		for i=1,#params,2 do
 			local c_type = params[i]
 			local name = params[i + 1]
@@ -1298,7 +1299,8 @@ local function process_module_file(file)
 			end
 			-- add cb_in to this rec.
 			local v_in = cb_in{ c_type, name}
-			rec:insert_record(v_in, 1)
+			rec:insert_record(v_in, idx)
+			idx = idx + 1
 			src[#src+1] = c_type .. " ${" .. v_in.name .. "}"
 			typedef[#typedef+1] = c_type .. " " .. v_in.name
 			vars[#vars+1] = "${" .. v_in.name .. "}"
