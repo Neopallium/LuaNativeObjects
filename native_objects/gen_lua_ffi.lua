@@ -25,9 +25,13 @@
 
 local ffi_helper_types = [[
 #if LUAJIT_FFI
+typedef int (*ffi_export_func_t)(void);
 typedef struct ffi_export_symbol {
 	const char *name;
-	void       *sym;
+	union {
+	void               *data;
+	ffi_export_func_t  func;
+	} sym;
 } ffi_export_symbol;
 #endif
 ]]
@@ -96,7 +100,7 @@ static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
 	/* export symbols to priv_table. */
 	while(ffi_exports->name != NULL) {
 		lua_pushstring(L, ffi_exports->name);
-		lua_pushlightuserdata(L, ffi_exports->sym);
+		lua_pushlightuserdata(L, ffi_exports->sym.data);
 		lua_settable(L, priv_table);
 		ffi_exports++;
 	}
@@ -828,7 +832,7 @@ c_module_end = function(self, rec, parent)
 	self._cur_module = nil
 	-- end list of FFI symbols
 	rec:write_part("ffi_export", {
-	'  {NULL, NULL}\n',
+	'  {NULL, { .data = NULL } }\n',
 	'};\n',
 	'#endif\n\n'
 	})
@@ -963,7 +967,7 @@ object_end = function(self, rec, parent)
 		-- Sub-module FFI code
 		-- end list of FFI symbols
 		rec:write_part("ffi_export", {
-		'  {NULL, NULL}\n',
+		'  {NULL, { .data = NULL } }\n',
 		'};\n\n'
 		})
 		-- end ffi.cdef code blocks
@@ -1165,11 +1169,11 @@ c_source = function(self, rec, parent)
 end,
 ffi_export = function(self, rec, parent)
 	parent:write_part("ffi_export",
-		{'{ "', rec.name, '", ', rec.name, ' },\n'})
+		{'{ "', rec.name, '", { .data = ', rec.name, ' } },\n'})
 end,
 ffi_export_function = function(self, rec, parent)
 	parent:write_part("ffi_export",
-		{'{ "', rec.name, '", ', rec.name, ' },\n'})
+		{'{ "', rec.name, '", { .func = (ffi_export_func_t)', rec.name, ' } },\n'})
 end,
 ffi_source = function(self, rec, parent)
 	parent:write_part(rec.part, rec.src)
