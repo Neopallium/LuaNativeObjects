@@ -59,7 +59,7 @@ function new_c_type(c_type, rec)
 end
 
 local function real_c_type_resolver(self)
-	local c_type = self.c_type
+	local c_type = self._c_type
 	local _type = c_types[c_type]
 	-- if type unknown see if it is a pointer.
 	if _type == nil and c_type ~= "void*" and c_type:find("*",1,true) ~= nil then
@@ -83,7 +83,7 @@ __index = function(self, key)
 	if _type then
 		return _type[key]
 	else
-		print("type not resolved yet: " .. self.c_type)
+		print("type not resolved yet: " .. self._c_type)
 	end
 	return nil
 end,
@@ -96,7 +96,7 @@ __newindex = function(self, key, value)
 	if _type then
 		_type[key] = value
 	else
-		print("type not resolved yet: " .. self.c_type)
+		print("type not resolved yet: " .. self._c_type)
 	end
 end,
 __len = function(self)
@@ -108,11 +108,11 @@ __len = function(self)
 	if _type then
 		return #_type
 	else
-		error("type not resolved yet: " .. self.c_type)
+		error("type not resolved yet: " .. self._c_type)
 	end
 end,
 __eq = function(op1, op2)
-	return op1.c_type == op2.c_type
+	return op1._c_type == op2._c_type
 end,
 }
 local cache_resolvers={}
@@ -120,7 +120,7 @@ function resolve_c_type(c_type)
 	local c_type = strip_c_type(c_type)
 	local resolver = cache_resolvers[c_type]
 	if resolver == nil then
-		resolver = {c_type = c_type}
+		resolver = {_c_type = c_type}
 		setmetatable(resolver, resolve_meta)
 		cache_resolvers[c_type] = resolver
 	end
@@ -181,6 +181,7 @@ function object(name)
 	rec.has_obj_flags = true
 	if userdata_type == 'generic' or userdata_type == 'embed' or userdata_type == 'simple ptr' then
 		ctype(name .. " *", rec,"object")
+		rec.is_ptr = true
 		rec.name = name
 		-- map the c_type to this record
 		new_c_type(name, rec)
