@@ -1611,7 +1611,14 @@ callback_func_end = function(self, rec, parent)
 	})
 	rec:write_part("vars", {'\n  ', rec:_push('wrap->' .. rec.ref_field),})
 	-- call lua callback function.
-	rec:write_part("src", {'  lua_call(L, ', rec.cb_ins, ', ', rec.cb_outs , ');\n'})
+	rec:write_part("pre_src", {
+	'  if(lua_pcall(L, ', rec.cb_ins, ', ', rec.cb_outs , ', 0)) {\n  ',
+	})
+	rec:write_part("post_src", {
+	'    fprintf(stdout, "CALLBACK Error: %s\\n", lua_tostring(L, -1));\n',
+	'    lua_pop(L, 1);\n',
+	'  }\n',
+	})
 	rec:write_part("post", {'  lua_pop(L, ', rec.cb_outs , ');\n'})
 	-- get return value from lua function.
 	local ret_out = rec.ret_out
@@ -1619,7 +1626,7 @@ callback_func_end = function(self, rec, parent)
 		rec:write_part("post", {'  return ${', ret_out.name , '};\n'})
 	end
 	-- map in/out variables in c source.
-	local parts = {"cb_head", "vars", "params", "src", "post"}
+	local parts = {"cb_head", "vars", "params", "pre_src", "src", "post_src", "post"}
 	rec:vars_parts(parts)
 	rec:vars_parts('func_decl')
 

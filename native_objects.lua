@@ -698,20 +698,18 @@ end
 end
 
 function callback(c_type)
+	if type(c_type) == 'table' then
+		local rec = var_in(c_type)
+		rec.is_callback = true
+		rec.is_ref = true
+		rec.ref_field = rec.name
+		-- other variable that will be wrapped to hold callback state information.
+		rec.state_var = table.remove(rec, 1)
+		return rec
+	end
 	return function (name)
 	return function (state_var)
-	rec = make_record({}, "var_in")
-	rec.is_callback = true
-	rec.is_ref = true
-	rec.ref_field = name
-	-- c_type for callback.
-	rec.c_type = c_type
-	-- callback variable's name
-	rec.name = name
-	-- other variable that will be wrapped to hold callback state information.
-	rec.state_var = state_var
-	resolve_rec(rec)
-	return rec
+	return callback({c_type, name, state_var})
 end
 end
 end
@@ -1056,6 +1054,15 @@ local function process_module_file(file)
 		container:insert_record(cb_state, 1)
 		-- create callback_func instance.
 		local cb_func = callback_func(rec.c_type)(rec.name)
+		-- move sub-records from 'var_in' callback record into 'callback_func'
+		local cb=rec
+		for i=1,#cb do
+			local rec = cb[i]
+			if is_record(rec) and rec._rec_type ~= "ignore" then
+				cb:remove_record(rec) -- remove from 'var_in'
+				cb_func:add_record(rec) -- add to 'callback_func'
+			end
+		end
 		cb_state:add_record(cb_func)
 		rec.cb_func = cb_func
 		rec.c_type_rec = cb_func
@@ -1271,7 +1278,7 @@ local function process_module_file(file)
 		local ret = func_type.ret
 		if ret ~= "void" then
 			rec.ret_out = cb_out{ ret, "ret" }
-			rec:add_record(rec.ret_out)
+			rec:insert_record(rec.ret_out, 1)
 		end
 		src[#src+1] = ret .. " "
 		typedef[#typedef+1] = ret .. " "
@@ -1291,7 +1298,7 @@ local function process_module_file(file)
 			end
 			-- add cb_in to this rec.
 			local v_in = cb_in{ c_type, name}
-			rec:add_record(v_in)
+			rec:insert_record(v_in, 1)
 			src[#src+1] = c_type .. " ${" .. v_in.name .. "}"
 			typedef[#typedef+1] = c_type .. " " .. v_in.name
 			vars[#vars+1] = "${" .. v_in.name .. "}"
@@ -1302,11 +1309,27 @@ local function process_module_file(file)
 		rec.c_func_decl = table.concat(src)
 		rec.c_func_typedef = table.concat(typedef)
 		rec.param_vars = table.concat(vars, ', ')
+		-- map names to in/out variables
+		rec.var_map = {}
+		function rec:add_variable(var, name)
+			name = name or var.name
+			local old_var = self.var_map[name]
+			assert(old_var == nil or old_var == var,
+				"duplicate variable " .. name .. " in " .. self.name)
+			-- add this variable to parent
+			self.var_map[name] = var
+		end
 	end,
 	var_in = function(self, rec, parent)
 		parent:add_variable(rec)
 	end,
 	var_out = function(self, rec, parent)
+		parent:add_variable(rec)
+	end,
+	cb_in = function(self, rec, parent)
+		parent:add_variable(rec)
+	end,
+	cb_out = function(self, rec, parent)
 		parent:add_variable(rec)
 	end,
 	c_call = function(self, rec, parent)

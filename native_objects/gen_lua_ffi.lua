@@ -1096,7 +1096,7 @@ callback_func = function(self, rec, parent)
 	-- add callback typedef
 	rec:write_part('ffi_cdef', {rec.c_func_typedef, '\n'})
 	-- start callback function.
-	rec:write_part("cb_head",
+	rec:write_part("ffi_cb_head",
 	{'-- callback: ', rec.name, '\n',
 	 'local ', rec.c_func_name, ' = ffi.cast("',rec.c_type,'",function (', rec.param_vars, ')\n',
 	})
@@ -1108,24 +1108,30 @@ callback_func_end = function(self, rec, parent)
 	local wrapped = rec.wrapped_var
 	local wrapped_type = wrapped.c_type_rec
 	local wrap_type = parent.wrap_type .. ' *'
-	rec:write_part("cb_head",
+	rec:write_part("ffi_cb_head",
 	{'  local id = obj_ptr_to_id(', wrapped_type:_ffi_push(wrapped) ,')\n',
 	 '  local wrap = nobj_callback_states[id]\n',
 	})
-	rec:write_part("vars", {'\n  local cb = wrap.' .. rec.ref_field,'\n',})
 	-- generate code for return value from lua function.
 	local ret_out = rec.ret_out
 	if ret_out then
-		rec:write_part("src", {'  ${', ret_out.name , '} = '})
-		rec:write_part("post", {'  return ${', ret_out.name , '}\n'})
+		rec:write_part("ffi_post", {'  return ret\n'})
 	end
 	-- call lua callback function.
-	local cb_params = rec:dump_parts("cb_params")
+	local cb_params = rec:dump_parts("ffi_cb_params")
 	cb_params = cb_params:gsub(", $","")
-	rec:write_part("src", {'cb(', cb_params,')\n',})
-	rec:write_part("post", {'end)\n\n'})
+	rec:write_part("ffi_pre_src", {
+	'  local status, ret = pcall(wrap.' .. rec.ref_field,', ', cb_params,')\n',
+	'  if not status then\n  ',
+	})
+	rec:write_part("ffi_post_src", {
+	'    print("CALLBACK Error:", ret)\n',
+	'    ret = nil\n',
+	'  end\n',
+	})
+	rec:write_part("ffi_post", {'end)\n\n'})
 	-- map in/out variables in c source.
-	local parts = {"cb_head", "vars", "src", "post"}
+	local parts = {"ffi_cb_head", "ffi_pre_src", "ffi_src", "ffi_post_src", "ffi_post"}
 	rec:vars_parts(parts)
 	rec:vars_parts('ffi_cdef')
 
@@ -1439,19 +1445,17 @@ cb_in = function(self, rec, parent)
 	parent:add_rec_var(rec)
 	local var_type = rec.c_type_rec
 	if not rec.is_wrapped_obj then
-		parent:write_part("cb_params", { var_type:_ffi_push(rec), ', ' })
+		parent:write_part("ffi_cb_params", { var_type:_ffi_push(rec), ', ' })
 	else
 		-- this is the wrapped object parameter.
 		parent.wrapped_var = rec
 	end
 end,
 cb_out = function(self, rec, parent)
-	parent:add_rec_var(rec)
+	parent:add_rec_var(rec, 'ret', 'ret')
 	local var_type = rec.c_type_rec
-	parent:write_part("vars",
-		{'  local ${', rec.name, '}\n'})
-	parent:write_part("post",
-		{'  ', var_type:_ffi_check(rec) })
+	parent:write_part("ffi_post",
+		{'  ', var_type:_ffi_opt(rec) })
 end,
 }
 
