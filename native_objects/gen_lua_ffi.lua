@@ -246,6 +246,8 @@ int memcmp(const void *s1, const void *s2, size_t n);
 
 ]])
 
+local nobj_callback_states = {}
+
 local function obj_ptr_to_id(ptr)
 	return tonumber(ffi.cast('uintptr_t', ptr))
 end
@@ -1021,8 +1023,32 @@ object_end = function(self, rec, parent)
 
 end,
 callback_state = function(self, rec, parent)
+	rec:add_var('wrap_type', rec.wrap_type)
+	rec:add_var('base_type', rec.base_type)
+	-- generate allocate function for base type.
+	rec:write_part("extra_code", [[
+
+/* object allocation function for FFI bindings. */
+${base_type} *nobj_ffi_${base_type}_new() {
+	${base_type} *obj;
+	obj_type_new(${base_type}, obj);
+	return obj;
+}
+void nobj_ffi_${base_type}_free(${base_type} *obj) {
+	obj_type_free(${base_type}, obj);
+}
+
+]])
+	rec:write_part("ffi_cdef", "${base_type} *nobj_ffi_${base_type}_new();\n")
+	rec:write_part("ffi_cdef", "void nobj_ffi_${base_type}_free(${base_type} *obj);\n")
 end,
 callback_state_end = function(self, rec, parent)
+	-- apply variables to parts
+	local parts = {"ffi_cdef", "ffi_src", "extra_code"}
+	rec:vars_parts(parts)
+	add_source(rec, "extra_code", rec:dump_parts("extra_code"))
+	-- copy parts to parent
+	parent:copy_parts(rec, parts)
 end,
 include = function(self, rec, parent)
 end,
@@ -1065,8 +1091,46 @@ end,
 extends_end = function(self, rec, parent)
 end,
 callback_func = function(self, rec, parent)
+	rec.wrapped_type = parent.c_type
+	rec.wrapped_type_rec = parent.c_type_rec
+	-- add callback typedef
+	rec:write_part('ffi_cdef', {rec.c_func_typedef, '\n'})
+	-- start callback function.
+	rec:write_part("cb_head",
+	{'-- callback: ', rec.name, '\n',
+	 'local ', rec.c_func_name, ' = ffi.cast("',rec.c_type,'",function (', rec.param_vars, ')\n',
+	})
+	-- add lua reference to wrapper object.
+	parent:write_part('wrapper_callbacks',
+	  {'  int ', rec.ref_field, ';\n'})
 end,
 callback_func_end = function(self, rec, parent)
+	local wrapped = rec.wrapped_var
+	local wrapped_type = wrapped.c_type_rec
+	local wrap_type = parent.wrap_type .. ' *'
+	rec:write_part("cb_head",
+	{'  local id = obj_ptr_to_id(', wrapped_type:_ffi_push(wrapped) ,')\n',
+	 '  local wrap = nobj_callback_states[id]\n',
+	})
+	rec:write_part("vars", {'\n  local cb = wrap.' .. rec.ref_field,'\n',})
+	-- generate code for return value from lua function.
+	local ret_out = rec.ret_out
+	if ret_out then
+		rec:write_part("src", {'  ${', ret_out.name , '} = '})
+		rec:write_part("post", {'  return ${', ret_out.name , '}\n'})
+	end
+	-- call lua callback function.
+	local cb_params = rec:dump_parts("cb_params")
+	cb_params = cb_params:gsub(", $","")
+	rec:write_part("src", {'cb(', cb_params,')\n',})
+	rec:write_part("post", {'end)\n\n'})
+	-- map in/out variables in c source.
+	local parts = {"cb_head", "vars", "src", "post"}
+	rec:vars_parts(parts)
+	rec:vars_parts('ffi_cdef')
+
+	parent:write_part('ffi_src', rec:dump_parts(parts))
+	parent:write_part('ffi_cdef', rec:dump_parts('ffi_cdef'))
 end,
 dyn_caster = function(self, rec, parent)
 	local vtab = rec.ffi_value_table or ''
@@ -1133,6 +1197,33 @@ end,
 c_function_end = function(self, rec, parent)
 	-- don't generate FFI bindings
 	if self._cur_module.ffi_manual_bindings then return end
+
+	-- is this a wrapper function
+	if rec.wrapper_obj then
+		local wrap_obj = rec.wrapper_obj
+		local wrap_type = wrap_obj.wrap_type
+		local callbacks = wrap_obj.callbacks
+		if rec.is_destructor then
+			rec:write_part("ffi_pre",
+				{'  local id = obj_ptr_to_id(${this})\n',
+				 '  local wrap = nobj_callback_states[id]\n'})
+			for name,cb in pairs(callbacks) do
+				rec:write_part("ffi_src",
+					{'  wrap.', name,' = nil\n'})
+			end
+			rec:write_part("ffi_post",
+				{'  nobj_callback_states[id] = nil\n',
+				 '  C.nobj_ffi_',wrap_obj.base_type,'_free(${this})\n',
+				})
+		elseif rec.is_constructor then
+			rec:write_part("ffi_pre",
+				{'  ${this} = C.nobj_ffi_',wrap_obj.base_type,'_new()\n',
+				 '  local id = obj_ptr_to_id(${this})\n',
+				 '  local wrap = {}\n',
+				 '  nobj_callback_states[id] = wrap\n',
+				})
+		end
+	end
 
 	-- check if function has FFI support
 	local ffi_src = rec:dump_parts("ffi_src")
@@ -1232,6 +1323,13 @@ var_in = function(self, rec, parent)
 		end
 		parent:write_part("ffi_pre",
 			{'  ', ffi_get })
+	end
+	-- is a lua reference.
+	if var_type.is_ref then
+		parent:write_part("ffi_src",
+			{'  wrap.', var_type.ref_field, ' = ${',rec.name,'}\n',
+			 '  ${',rec.name,'} = ', rec.cb_func.c_func_name, '\n',
+			 })
 	end
 end,
 var_out = function(self, rec, parent)
@@ -1338,8 +1436,22 @@ var_out = function(self, rec, parent)
 	end
 end,
 cb_in = function(self, rec, parent)
+	parent:add_rec_var(rec)
+	local var_type = rec.c_type_rec
+	if not rec.is_wrapped_obj then
+		parent:write_part("cb_params", { var_type:_ffi_push(rec), ', ' })
+	else
+		-- this is the wrapped object parameter.
+		parent.wrapped_var = rec
+	end
 end,
 cb_out = function(self, rec, parent)
+	parent:add_rec_var(rec)
+	local var_type = rec.c_type_rec
+	parent:write_part("vars",
+		{'  local ${', rec.name, '}\n'})
+	parent:write_part("post",
+		{'  ', var_type:_ffi_check(rec) })
 end,
 }
 
