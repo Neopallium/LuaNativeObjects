@@ -163,6 +163,7 @@ local error = error
 local type = type
 local tonumber = tonumber
 local tostring = tostring
+local sformat = string.format
 local rawset = rawset
 local setmetatable = setmetatable
 local p_config = package.config
@@ -326,7 +327,7 @@ do
 	end
 
 	function obj_mt:__tostring()
-		return "${object_name}: " .. tostring(self._wrapped_val)
+		return sformat("${object_name}: %d", tonumber(self._wrapped_val))
 	end
 
 	function obj_mt.__eq(val1, val2)
@@ -386,8 +387,7 @@ do
 	end
 
 	function obj_mt:__tostring()
-		local id = obj_ptr_to_id(self)
-		return "${object_name}: " .. tostring(id)
+		return sformat("${object_name}: %p", self)
 	end
 
 	-- type checking function for C API.
@@ -428,7 +428,7 @@ do
 	end
 
 	function obj_mt:__tostring()
-		return "${object_name}: " .. tostring(ffi.cast('void *', self))
+		return sformat("${object_name}: %p", self)
 	end
 
 	function obj_mt.__eq(val1, val2)
@@ -491,7 +491,8 @@ do
 	end
 
 	function obj_mt:__tostring()
-		return "${object_name}: " .. tostring(self._wrapped_val)
+		return sformat("${object_name}: %d, flags=%d",
+			tonumber(self._wrapped_val), nobj_obj_flags[obj_ptr_to_id(self)] or 0)
 	end
 
 	function obj_mt.__eq(val1, val2)
@@ -555,8 +556,7 @@ ${dyn_caster}
 	end
 
 	function obj_mt:__tostring()
-		local id = obj_ptr_to_id(self)
-		return "${object_name}: " .. tostring(id)
+		return sformat("${object_name}: %p, flags=%d", self, nobj_obj_flags[obj_ptr_to_id(self)] or 0)
 	end
 
 	-- type checking function for C API.
@@ -619,8 +619,7 @@ ${dyn_caster}
 	end
 
 	function obj_mt:__tostring()
-		local id = obj_ptr_to_id(self)
-		return "${object_name}: " .. tostring(id)
+		return sformat("${object_name}: %p, flags=%d", self, nobj_obj_flags[obj_ptr_to_id(self)] or 0)
 	end
 
 	-- type checking function for C API.
