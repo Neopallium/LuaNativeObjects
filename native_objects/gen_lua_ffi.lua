@@ -202,6 +202,7 @@ else
 end
 
 local _M, _priv, reg_table = ...
+local REG_OBJECTS_AS_GLOBALS = false
 
 local OBJ_UDATA_FLAG_OWN		= 1
 
@@ -272,6 +273,9 @@ local function register_default_constructor(_pub, obj_name, constructor)
 	end
 	_pub[obj_name] = obj_pub
 	_M[obj_name] = obj_pub
+	if REG_OBJECTS_AS_GLOBALS then
+		_G[obj_name] = obj_pub
+	end
 end
 ]===]
 
@@ -797,6 +801,9 @@ c_module = function(self, rec, parent)
 	if rec.hide_meta_info == nil then rec.hide_meta_info = true end
 	-- luajit_ffi?
 	rec:insert_record(define("LUAJIT_FFI")(rec.luajit_ffi and 1 or 0), 1)
+	-- use_globals?
+	rec:write_part("ffi_obj_type",
+		{'REG_OBJECTS_AS_GLOBALS = ',(rec.use_globals and 'true' or 'false'),'\n'})
 	-- luajit_ffi_load_cmodule?
 	if rec.luajit_ffi_load_cmodule then
 		local global = 'false'
