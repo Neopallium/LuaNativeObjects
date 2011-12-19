@@ -1170,7 +1170,12 @@ c_function_end = function(self, rec, parent)
 	local ffi_cdef = { "ffi_cdef" }
 	rec:vars_parts(ffi_cdef)
 	parent:write_part("ffi_cdef", rec:dump_parts(ffi_cdef))
-	parent:write_part("ffi_src", rec:dump_parts(ffi_parts))
+	local temps = rec:dump_parts("ffi_temps")
+	if #temps > 0 then
+		parent:write_part("ffi_src", {"do\n", rec:dump_parts(ffi_parts), "end\n\n"})
+	else
+		parent:write_part("ffi_src", {rec:dump_parts(ffi_parts), "\n"})
+	end
 end,
 c_source = function(self, rec, parent)
 end,
