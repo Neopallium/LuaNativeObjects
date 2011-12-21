@@ -1555,19 +1555,22 @@ extends = function(self, rec, parent)
 	end
 	-- check for custom base_cast function.
 	if rec.cast_type == 'custom' then
+		local cast_type = parent.name .. '_to_' .. base.name .. '_t'
 		base_cast = create_base_caster(parent.name, base.name)
 		-- start base_cast function.
-		rec:add_var('in_obj', 'in_obj')
+		rec:add_var('in_obj', 'val.in')
 		rec:add_var('in_obj_type', parent.c_type)
-		rec:add_var('out_obj', 'out_obj')
+		rec:add_var('out_obj', 'val.out')
 		rec:add_var('out_obj_type', base.c_type)
-		local to_obj = '*(${in_obj_type} *)*'
-		if not parent.is_ptr then
-			to_obj = '*(${in_obj_type} *)'
-		end
+		rec:write_part('pre', {
+			'typedef union {\n',
+			'  void            *obj;\n',
+			'  ${in_obj_type}  in;\n',
+			'  ${out_obj_type} out;\n',
+			'} ',cast_type,';\n',
+		})
 		rec:write_part('src', {
-			'  ${in_obj_type} in_obj = ', to_obj, 'obj;\n',
-			'  ${out_obj_type} out_obj;\n',
+			'  ',cast_type,' val = { .obj = *obj};\n',
 		})
 	end
 	-- write base record.
@@ -1577,13 +1580,9 @@ extends = function(self, rec, parent)
 end,
 extends_end = function(self, rec, parent)
 	if rec.cast_type == 'custom' then
-		local to_ptr = '*(${out_obj_type} *)*'
-		if not rec.base.is_ptr then
-			to_ptr = '*(${out_obj_type} *)'
-		end
 		-- end caster function.
 		rec:write_part('src', {
-			'  ',to_ptr,'obj = out_obj;\n',
+			'  *obj = val.obj;\n',
 			'}\n\n'
 		})
 	end
@@ -1592,7 +1591,7 @@ extends_end = function(self, rec, parent)
 	rec:vars_parts(parts)
 
 	-- append custom base caster code
-	parent:write_part("methods", rec:dump_parts{ "src" })
+	parent:write_part("methods", rec:dump_parts(parts))
 end,
 callback_func = function(self, rec, parent)
 	rec.wrapped_type = parent.c_type
