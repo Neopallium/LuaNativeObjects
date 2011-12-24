@@ -372,6 +372,7 @@ do
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name} *")
 	_ctypes.${object_name} = obj_ctype
+	_type_names.${object_name} = tostring(obj_ctype)
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr
@@ -427,6 +428,7 @@ do
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name}")
 	_ctypes.${object_name} = obj_ctype
+	_type_names.${object_name} = tostring(obj_ctype)
 	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 
 	function obj_type_${object_name}_check(obj)
@@ -483,9 +485,18 @@ do
 	local obj_type = obj_mt['.type']
 	local obj_ctype = ffi.typeof("${object_name}_t")
 	_ctypes.${object_name} = obj_ctype
+	_type_names.${object_name} = tostring(obj_ctype)
 
 	function obj_type_${object_name}_check(obj)
-		return obj._wrapped_val
+		-- if obj is nil or is the correct type, then just return it.
+		if not obj or ffi.istype(obj_ctype, obj) then return obj._wrapped_val end
+		-- check if it is a compatible type.
+		local ctype = tostring(ffi.typeof(obj))
+		local bcaster = _obj_subs.${object_name}[ctype]
+		if bcaster then
+			return bcaster(obj._wrapped_val)
+		end
+		return error("Expected '${object_name}'", 2)
 	end
 
 	function obj_type_${object_name}_delete(obj)
