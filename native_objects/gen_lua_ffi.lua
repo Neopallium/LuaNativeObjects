@@ -177,11 +177,13 @@ local error = error
 local type = type
 local tonumber = tonumber
 local tostring = tostring
-local sformat = string.format
+local sformat = require"string".format
 local rawset = rawset
 local setmetatable = setmetatable
+local package = (require"package") or {}
 local p_config = package.config
 local p_cpath = package.cpath
+
 
 local ffi_load_cmodule
 
