@@ -191,7 +191,7 @@ local ffi_load_cmodule
 if p_config == nil and p_cpath == nil then
 	ffi_load_cmodule = function(name, global)
 		for path,module in pairs(package.loaded) do
-			if type(module) == 'string' and path:match(name) == name then
+			if module == name then
 				local C, err = ffi_safe_load(path, global)
 				-- return opened library
 				if C then return C end
