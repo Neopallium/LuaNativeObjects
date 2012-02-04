@@ -230,6 +230,10 @@ local objHelperFunc = [[
 #define REG_PACKAGE_IS_CONSTRUCTOR 1
 #endif
 
+#ifndef REG_MODULES_AS_GLOBALS
+#define REG_MODULES_AS_GLOBALS 0
+#endif
+
 #ifndef REG_OBJECTS_AS_GLOBALS
 #define REG_OBJECTS_AS_GLOBALS 0
 #endif
@@ -932,8 +936,12 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 	create_object_instance_cache(L);
 
 	/* module table. */
+#if REG_MODULES_AS_GLOBALS
+	luaL_register(L, "${module_name}", ${module_c_name}_function);
+#else
 	lua_newtable(L);
 	luaL_register(L, NULL, ${module_c_name}_function);
+#endif
 
 	/* register module constants. */
 	obj_type_register_constants(L, ${module_c_name}_constants, -1, false);
@@ -976,8 +984,12 @@ LUA_NOBJ_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	create_object_instance_cache(L);
 
 	/* submodule table. */
+#if REG_MODULES_AS_GLOBALS
+	luaL_register(L, "${module_name}.${object_name}", &(null_reg_list));
+#else
 	lua_newtable(L);
 	luaL_register(L, NULL, &(null_reg_list));
+#endif
 
 	/* register submodule. */
 	lua_pushvalue(L, -1);   /* dup. submodule's table. */
@@ -1157,6 +1169,9 @@ c_module = function(self, rec, parent)
 	-- package_is_constructor?
 	rec:write_part("defines",
 		{'#define REG_PACKAGE_IS_CONSTRUCTOR ',(rec.package_is_constructor and 1 or 0),'\n'})
+	-- module_globals?
+	rec:write_part("defines",
+		{'#define REG_MODULES_AS_GLOBALS ',(rec.module_globals and 1 or 0),'\n'})
 	-- use_globals?
 	rec:write_part("defines",
 		{'#define REG_OBJECTS_AS_GLOBALS ',(rec.use_globals and 1 or 0),'\n'})

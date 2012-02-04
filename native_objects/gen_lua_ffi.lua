@@ -219,6 +219,7 @@ else
 end
 
 local _M, _priv, reg_table = ...
+local REG_MODULES_AS_GLOBALS = false
 local REG_OBJECTS_AS_GLOBALS = false
 local C = ffi.C
 
@@ -838,6 +839,9 @@ c_module = function(self, rec, parent)
 	if rec.hide_meta_info == nil then rec.hide_meta_info = true end
 	-- luajit_ffi?
 	rec:insert_record(define("LUAJIT_FFI")(rec.luajit_ffi and 1 or 0), 1)
+	-- module_globals?
+	rec:write_part("ffi_obj_type",
+		{'REG_MODULES_AS_GLOBALS = ',(rec.module_globals and 'true' or 'false'),'\n'})
 	-- use_globals?
 	rec:write_part("ffi_obj_type",
 		{'REG_OBJECTS_AS_GLOBALS = ',(rec.use_globals and 'true' or 'false'),'\n'})
