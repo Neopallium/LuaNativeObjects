@@ -206,7 +206,7 @@ typedef struct reg_sub_module {
 	const obj_base  *bases;
 	const obj_field *fields;
 	const obj_const *constants;
-	bool            bidirectional_consts;
+	int             bidirectional_consts;
 } reg_sub_module;
 
 #define OBJ_UDATA_FLAG_OWN (1<<0)
@@ -649,7 +649,7 @@ static int obj_constructor_call_wrapper(lua_State *L) {
 }
 
 static void obj_type_register_constants(lua_State *L, const obj_const *constants, int tab_idx,
-		bool bidirectional) {
+		int bidirectional) {
 	/* register constants. */
 	while(constants->name != NULL) {
 		lua_pushstring(L, constants->name);
@@ -1397,9 +1397,9 @@ object_end = function(self, rec, parent)
 		type_info_ptr = 'NULL'
 	end
 	local object_reg_info
-	local bidirectional = 'false'
+	local bidirectional = '0'
 	if rec.map_constants_bidirectional then
-		bidirectional = 'true'
+		bidirectional = '1'
 	end
 	if rec.is_meta then
 		object_reg_info = {
