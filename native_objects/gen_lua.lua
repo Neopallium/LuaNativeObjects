@@ -944,7 +944,7 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 #endif
 
 	/* register module constants. */
-	obj_type_register_constants(L, ${module_c_name}_constants, -1, false);
+	obj_type_register_constants(L, ${module_c_name}_constants, -1, 0);
 
 	for(; submodules->func != NULL ; submodules++) {
 		lua_pushcfunction(L, submodules->func);
@@ -1196,7 +1196,7 @@ c_module_end = function(self, rec, parent)
 	})
 	-- end module/object register array.
 	rec:write_part("reg_sub_modules", {
-	'  {NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, false}\n',
+	'  {NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0}\n',
 	'};\n\n'
 	})
 	-- end submodule_libs array
