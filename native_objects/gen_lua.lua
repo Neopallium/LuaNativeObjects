@@ -57,6 +57,7 @@ local obj_udata_types = [[
 /* for MinGW32 compiler need to include <stdint.h> */
 #ifdef __GNUC__
 #include <stdint.h>
+#include <stdbool.h>
 #else
 
 /* define some standard types missing on Windows. */
