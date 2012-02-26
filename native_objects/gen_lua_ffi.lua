@@ -880,7 +880,7 @@ c_module_end = function(self, rec, parent)
 	self._cur_module = nil
 	-- end list of FFI symbols
 	rec:write_part("ffi_export", {
-	'  {NULL, { .data = NULL } }\n',
+	'  {NULL, { NULL } }\n',
 	'};\n',
 	'#endif\n\n'
 	})
@@ -1021,7 +1021,7 @@ object_end = function(self, rec, parent)
 		-- Sub-module FFI code
 		-- end list of FFI symbols
 		rec:write_part("ffi_export", {
-		'  {NULL, { .data = NULL } }\n',
+		'  {NULL, { NULL } }\n',
 		'};\n\n'
 		})
 		-- end ffi.cdef code blocks
@@ -1379,7 +1379,7 @@ c_source = function(self, rec, parent)
 end,
 ffi_export = function(self, rec, parent)
 	parent:write_part("ffi_export",
-		{'{ "', rec.name, '", { .data = ', rec.name, ' } },\n'})
+		{'{ "', rec.name, '", { ', rec.name, ' } },\n'})
 end,
 ffi_export_function = function(self, rec, parent)
 	parent:write_part("ffi_export",

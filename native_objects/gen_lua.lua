@@ -581,6 +581,7 @@ static FUNC_UNUSED void * obj_simple_udata_luadelete(lua_State *L, int _index, o
 
 static FUNC_UNUSED void *obj_simple_udata_luapush(lua_State *L, void *obj, int size, obj_type *type)
 {
+	void *ud;
 #if LUAJIT_FFI
 	lua_pushlightuserdata(L, type);
 	lua_rawget(L, LUA_REGISTRYINDEX); /* type's metatable. */
@@ -592,7 +593,7 @@ static FUNC_UNUSED void *obj_simple_udata_luapush(lua_State *L, void *obj, int s
 	}
 #endif
 	/* create new userdata. */
-	void *ud = lua_newuserdata(L, size);
+	ud = lua_newuserdata(L, size);
 	memcpy(ud, obj, size);
 	/* get obj_type metatable. */
 #if LUAJIT_FFI
@@ -1866,7 +1867,7 @@ var_out = function(self, rec, parent)
 	elseif var_type.userdata_type == 'embed' then
 		parent:write_part("pre",
 			{'  ', var_type.name, ' ${', rec.name, '}_store;\n'})
-		init = ' = &(${' .. rec.name .. '}_store);'
+		init = ' = &(${' .. rec.name .. '}_store)'
 	end
 	-- add C variable to hold value to be pushed.
 	parent:write_part("pre",
