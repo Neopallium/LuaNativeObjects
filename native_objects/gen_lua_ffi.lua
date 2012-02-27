@@ -106,8 +106,6 @@ static const char *nobj_lua_Reader(lua_State *L, void *data, size_t *size) {
 	ptr = state->ffi_init_code[state->offset];
 	if(ptr != NULL) {
 		*size = strlen(ptr);
-fprintf(stderr, "-- chunk off=%d, len=%d\n", state->offset, *size);
-fprintf(stderr, "%s", ptr);
 		state->offset++;
 	} else {
 		*size = 0;
