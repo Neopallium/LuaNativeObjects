@@ -1187,7 +1187,7 @@ local function process_module_file(file)
 		if rec.ffi_need_wrapper == 'c_wrap' then
 			object:add_record(c_source("src")({
 			"\n/* FFI wrapper for inline/macro call */\n",
-			"static ", cdef, " {\n",
+			"LUA_NOBJ_API ", cdef, " {\n",
 			call,
 			"}\n",
 			}))
@@ -1404,7 +1404,7 @@ local function process_module_file(file)
 		src[#src+1] = func_start
 		ffi_cdef[#ffi_cdef+1] = func_start
 		if rec.ffi_need_wrapper then
-			ffi_src[#ffi_src+1] = rec.ffi_export_prefix
+			ffi_src[#ffi_src+1] = "Cmod." .. rec.ffi_export_prefix
 		else
 			ffi_src[#ffi_src+1] = "C."
 		end
@@ -1520,49 +1520,6 @@ local function process_module_file(file)
 		-- insert FFI source record.
 		local idx = parent:find_record(rec)
 		parent:insert_record(ffi_source("ffi_import")(ffi_src), idx)
-	end,
-	ffi_export_function = function(self, rec, parent)
-		local ffi_cdef={}
-		local ffi_src={}
-		local cdef_name = rec.name .. '_func'
-		-- pass C definition to FFI
-		ffi_cdef[#ffi_cdef+1] = 'typedef '
-		ffi_cdef[#ffi_cdef+1] = rec.ret .. " (*"
-		ffi_cdef[#ffi_cdef+1] = cdef_name .. ")"
-		local params = rec.params
-		if type(params) == 'string' then
-			ffi_cdef[#ffi_cdef+1] = params .. ";\n"
-		else
-			ffi_cdef[#ffi_cdef+1] = "("
-			for i=1,#params,2 do
-				local c_type = params[i]
-				local name = params[i+1]
-				if i > 1 then
-					ffi_cdef[#ffi_cdef+1] = ","
-				end
-				ffi_cdef[#ffi_cdef+1] = c_type
-			end
-			ffi_cdef[#ffi_cdef+1] = ");\n"
-		end
-		-- load exported symbol
-		ffi_src[#ffi_src+1] = 'local '
-		ffi_src[#ffi_src+1] = rec.name
-		ffi_src[#ffi_src+1] = ' = ffi.new("'
-		ffi_src[#ffi_src+1] = rec.name
-		ffi_src[#ffi_src+1] = '_func", _priv["'
-		ffi_src[#ffi_src+1] = rec.name
-		ffi_src[#ffi_src+1] = '"])\n'
-		-- insert FFI source record.
-		local idx = parent:find_record(rec)
-		ffi_cdef = tconcat(ffi_cdef)
-		parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
-		parent:insert_record(ffi_source("ffi_import")(ffi_src), idx+1)
-		-- check for duplicate ffi cdefs.
-		local cdef = ffi_cdefs[cdef_name]
-		if cdef and cdef ~= ffi_cdef then
-			error("Re-definition of FFI cdef: " .. cdef)
-		end
-		ffi_cdefs[cdef_name] = ffi_cdef
 	end,
 	}
 	-- clear ffi cdefs

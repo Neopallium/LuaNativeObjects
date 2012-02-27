@@ -852,7 +852,7 @@ c_module = function(self, rec, parent)
 			global = 'true'
 		end
 		rec:write_part("ffi_typedef", {[[
-C = ffi_load_cmodule("${module_c_name}", ]], global ,[[)
+local Cmod = ffi_load_cmodule("${module_c_name}", ]], global ,[[)
 
 ]]})
 	end
@@ -903,7 +903,7 @@ c_module_end = function(self, rec, parent)
 	-- encode luajit ffi code
 	if rec.luajit_ffi then
 		local ffi_code = ffi_helper_code .. rec:dump_parts{
-			"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
+			"ffi_pre_cdef", "ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
 			"ffi_metas_regs", "ffi_extends"
 		}
 		rec:write_part("ffi_code",
@@ -936,7 +936,7 @@ end
 	if self._cur_module.ffi_manual_bindings then return end
 
 	-- copy generated FFI bindings to parent
-	local ffi_parts = { "ffi_typedef", "ffi_cdef", "ffi_src" }
+	local ffi_parts = { "ffi_pre_cdef", "ffi_typedef", "ffi_cdef", "ffi_src" }
 	rec:vars_parts(ffi_parts)
 	parent:copy_parts(rec, ffi_parts)
 end,
@@ -1032,7 +1032,7 @@ object_end = function(self, rec, parent)
 		'\n]]\n\n'
 		})
 		local ffi_code = ffi_helper_code .. rec:dump_parts{
-			"ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
+			"ffi_pre_cdef", "ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
 			"ffi_metas_regs", "ffi_extends"
 		}
 		rec:write_part("ffi_code",
@@ -1059,7 +1059,7 @@ object_end = function(self, rec, parent)
 		if self._cur_module.ffi_manual_bindings then return end
 
 		-- copy generated FFI bindings to parent
-		local ffi_parts = { "ffi_typedef", "ffi_cdef", "ffi_import", "ffi_src",
+		local ffi_parts = { "ffi_pre_cdef", "ffi_typedef", "ffi_cdef", "ffi_import", "ffi_src",
 			"ffi_metas_regs", "ffi_extends"
 		}
 		rec:vars_parts(ffi_parts)
@@ -1380,10 +1380,6 @@ end,
 ffi_export = function(self, rec, parent)
 	parent:write_part("ffi_export",
 		{'{ "', rec.name, '", { ', rec.name, ' } },\n'})
-end,
-ffi_export_function = function(self, rec, parent)
-	parent:write_part("ffi_export",
-		{'{ "', rec.name, '", { .func = (ffi_export_func_t)', rec.name, ' } },\n'})
 end,
 ffi_source = function(self, rec, parent)
 	parent:write_part(rec.part, rec.src)
