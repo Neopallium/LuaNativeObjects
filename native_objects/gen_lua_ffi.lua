@@ -58,7 +58,8 @@ static int nobj_check_ffi_support(lua_State *L) {
 	if(!lua_isnil(L, -1)) {
 		rc = lua_toboolean(L, -1);
 		lua_pop(L, 1);
-		return rc; /* return results of previous check. */
+		/* use results of previous check. */
+		goto finished;
 	}
 	lua_pop(L, 1); /* pop nil. */
 
@@ -84,6 +85,7 @@ static int nobj_check_ffi_support(lua_State *L) {
 	lua_pushboolean(L, rc);
 	lua_rawset(L, LUA_REGISTRYINDEX);
 
+finished:
 	/* turn-on hint that there is FFI code enabled. */
 	if(rc) {
 		nobj_ffi_support_enabled_hint = 1;
@@ -853,6 +855,7 @@ c_module = function(self, rec, parent)
 		end
 		rec:write_part("ffi_typedef", {[[
 local Cmod = ffi_load_cmodule("${module_c_name}", ]], global ,[[)
+local C = Cmod
 
 ]]})
 	end
