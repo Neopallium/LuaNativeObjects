@@ -94,9 +94,31 @@ finished:
 	return rc;
 }
 
+typedef struct {
+	const char **ffi_init_code;
+	int offset;
+} nobj_reader_state;
+
+static const char *nobj_lua_Reader(lua_State *L, void *data, size_t *size) {
+	nobj_reader_state *state = (nobj_reader_state *)data;
+	const char *ptr;
+
+	ptr = state->ffi_init_code[state->offset];
+	if(ptr != NULL) {
+		*size = strlen(ptr);
+fprintf(stderr, "-- chunk off=%d, len=%d\n", state->offset, *size);
+fprintf(stderr, "%s", ptr);
+		state->offset++;
+	} else {
+		*size = 0;
+	}
+	return ptr;
+}
+
 static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
-		const char *ffi_init_code, const ffi_export_symbol *ffi_exports, int priv_table)
+		const char *ffi_init_code[], const ffi_export_symbol *ffi_exports, int priv_table)
 {
+	nobj_reader_state state = { ffi_init_code, 0 };
 	int err;
 
 	/* export symbols to priv_table. */
@@ -106,7 +128,7 @@ static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
 		lua_settable(L, priv_table);
 		ffi_exports++;
 	}
-	err = luaL_loadbuffer(L, ffi_init_code, strlen(ffi_init_code), ffi_mod_name);
+	err = lua_load(L, nobj_lua_Reader, &state, ffi_mod_name);
 	if(0 == err) {
 		lua_pushvalue(L, -2); /* dup C module's table. */
 		lua_pushvalue(L, priv_table); /* move priv_table to top of stack. */
@@ -748,7 +770,8 @@ __index = '__index',
 __newindex = '__newindex',
 }
 
-local function dump_lua_code_to_c_str(code)
+local MAX_C_LITERAL = (16 * 1024)
+local function dump_lua_code_to_c_str(code, name)
 	-- make Lua code C-safe
 	code = code:gsub('[\n"\\%z]', {
 	['\n'] = "\\n\"\n\"",
@@ -757,7 +780,37 @@ local function dump_lua_code_to_c_str(code)
 	['\\'] = [[\\]],
 	['\0'] = [[\0]],
 	})
-	return '"' .. code .. '";'
+	local tcode = {'\nstatic const char *', name, '[] = { "', }
+	-- find all cut positions.
+	local last_pos = 1
+	local next_boundry = last_pos + MAX_C_LITERAL
+	local cuts = {} -- list of positions to cut the code at.
+	for pos in code:gmatch("()\n") do -- find end position of all lines.
+		-- check if current line will cross a cut boundry.
+		if pos > next_boundry then
+			-- cut code at end of last line.
+			cuts[#cuts + 1] = last_pos
+			next_boundry = pos + MAX_C_LITERAL
+		end
+		-- track end of last line.
+		last_pos = pos
+	end
+	cuts[#cuts + 1] = last_pos
+	-- split Lua code into multiple pieces if it is too long.
+	last_pos = 1
+	for i=1,#cuts do
+		local pos = cuts[i]
+		local piece = code:sub(last_pos, pos-1)
+		last_pos = pos
+		if(i > 1) then
+			-- cut last piece.
+			tcode[#tcode + 1] = ", /* ----- CUT ----- */"
+		end
+		tcode[#tcode + 1] = piece
+	end
+	tcode[#tcode + 1] = ', NULL };'
+
+	return tcode
 end
 
 local function gen_if_defs_code(rec)
@@ -910,8 +963,7 @@ c_module_end = function(self, rec, parent)
 			"ffi_metas_regs", "ffi_extends"
 		}
 		rec:write_part("ffi_code",
-		{'\nstatic const char ${module_c_name}_ffi_lua_code[] = ', dump_lua_code_to_c_str(ffi_code)
-		})
+			dump_lua_code_to_c_str(ffi_code, '${module_c_name}_ffi_lua_code'))
 		rec:vars_part("ffi_code")
 		add_source(rec, "extra_code", rec:dump_parts("ffi_code"))
 	end
@@ -1039,9 +1091,7 @@ object_end = function(self, rec, parent)
 			"ffi_metas_regs", "ffi_extends"
 		}
 		rec:write_part("ffi_code",
-		{'\nstatic const char ${module_c_name}_${object_name}_ffi_lua_code[] = ',
-			dump_lua_code_to_c_str(ffi_code)
-		})
+			dump_lua_code_to_c_str(ffi_code, '${module_c_name}_${object_name}_ffi_lua_code'))
 		-- copy ffi_code to partent
 		rec:vars_parts{ "ffi_code", "ffi_export" }
 		parent:copy_parts(rec, { "ffi_code" })
