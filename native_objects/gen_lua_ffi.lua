@@ -351,7 +351,7 @@ do
 	end
 
 	function obj_type_${object_name}_delete(obj)
-		local id = obj_to_id(obj._wrapped_val)
+		local id = obj_to_id(obj)
 		local valid = nobj_obj_flags[id]
 		if not valid then return nil end
 		local val = obj._wrapped_val
@@ -361,7 +361,7 @@ do
 
 	function obj_type_${object_name}_push(val)
 		local obj = obj_ctype(val)
-		local id = obj_to_id(obj._wrapped_val)
+		local id = obj_to_id(obj)
 		nobj_obj_flags[id] = true
 		return obj
 	end
@@ -526,7 +526,7 @@ do
 	end
 
 	function obj_type_${object_name}_delete(obj)
-		local id = obj_ptr_to_id(obj._wrapped_val)
+		local id = obj_to_id(obj)
 		local flags = nobj_obj_flags[id]
 		local val = obj._wrapped_val
 		if not flags then return nil, 0 end
@@ -536,7 +536,7 @@ do
 
 	function obj_type_${object_name}_push(val, flags)
 		local obj = obj_ctype(val)
-		local id = obj_ptr_to_id(obj._wrapped_val)
+		local id = obj_to_id(obj)
 		nobj_obj_flags[id] = flags
 		return obj
 	end
@@ -544,7 +544,7 @@ do
 	function obj_mt:__tostring()
 		local val = self._wrapped_val
 		return sformat("${object_name}: %d, flags=%d",
-			tonumber(val), nobj_obj_flags[obj_ptr_to_id(val)] or 0)
+			tonumber(val), nobj_obj_flags[obj_to_id(val)] or 0)
 	end
 
 	function obj_mt.__eq(val1, val2)
