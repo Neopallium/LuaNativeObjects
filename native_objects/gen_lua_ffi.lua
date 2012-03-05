@@ -103,6 +103,7 @@ static const char *nobj_lua_Reader(lua_State *L, void *data, size_t *size) {
 	nobj_reader_state *state = (nobj_reader_state *)data;
 	const char *ptr;
 
+	(void)L;
 	ptr = state->ffi_init_code[state->offset];
 	if(ptr != NULL) {
 		*size = strlen(ptr);
