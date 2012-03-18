@@ -661,8 +661,7 @@ do
 	function obj_type_${object_name}_push(ptr, flags)
 		local id = obj_ptr_to_id(ptr)
 		-- check weak refs
-		local old_ptr = nobj_weak_objects[id]
-		if old_ptr then return old_ptr end
+		if nobj_obj_flags[id] then return nobj_weak_objects[id] end
 ${dyn_caster}
 		if flags ~= 0 then
 			nobj_obj_flags[id] = flags
