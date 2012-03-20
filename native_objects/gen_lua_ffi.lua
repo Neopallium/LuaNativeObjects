@@ -815,17 +815,9 @@ local function gen_if_defs_code(rec)
 	if rec.ffi_if_defs then return end
 	-- generate if code for if_defs.
 	local if_defs = rec.if_defs
-	local defs = rec.ffi_defs_table
-	if not defs then
-		defs = '_M.'
-	else
-		defs = '_M.' .. defs .. '.'
-	end
 	local endif = 'end\n'
-	if type(if_defs) == 'string' then
-		if_defs = "if (" .. defs .. if_defs .. ') then\n'
-	elseif type(if_defs) == 'table' then
-		if_defs = "if (" .. defs .. table.concat(if_defs," or " .. defs) .. ') then\n'
+	if if_defs then
+		if_defs = "if (" .. rec.obj_table .. rec.ffi_reg_name .. ') then\n'
 	else
 		if_defs = ''
 		endif = ''
@@ -1344,14 +1336,14 @@ c_function = function(self, rec, parent)
 			rec.is__default_destructor = true
 		end
 	end
-	-- generate if code for if_defs.
-	gen_if_defs_code(rec)
 
 	-- register method/function with object.
 	local obj_table, ffi_table, name = reg_object_function(self, rec, parent)
 	rec.obj_table = obj_table
 	rec.ffi_table = ffi_table
 	rec.ffi_reg_name = name
+	-- generate if code for if_defs.
+	gen_if_defs_code(rec)
 
 	-- generate FFI function
 	rec:write_part("ffi_pre",
