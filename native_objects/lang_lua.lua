@@ -79,89 +79,87 @@ local lua_base_types = {
 process_records{
 	basetype = function(self, rec, parent)
 		local l_type = lua_base_types[rec.lang_type]
-		if l_type ~= nil then
-			rec._ffi_push = function(self, var, flags, unwrap)
-				local wrap = var.ffi_wrap
-				if wrap then
-					return wrap .. '(${' .. var.name .. '})' .. (unwrap or '')
-				else
-					return '${' .. var.name .. '}' .. (unwrap or '')
-				end
-			end
-			if rec.lang_type == 'string' then
-				rec._to = function(self, var)
-					return ' ${' .. var.name .. '} = ' ..
-						l_type.to .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
-				end
-				rec._check = function(self, var)
-					return ' ${' .. var.name .. '} = ' ..
-						l_type.check .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
-				end
-				rec._opt = function(self, var, default)
-					if default then
-						default = '"' .. default .. '"'
-					else
-						default = 'NULL'
-					end
-					return ' ${' .. var.name .. '} = ' ..
-						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default ..
-						',&(${' .. var.name .. '_len}));\n'
-				end
-				rec._push = function(self, var)
-					if var.has_length then
-						return
-						'  if(${' .. var.name .. '} == NULL) lua_pushnil(L);' ..
-						'  else ' .. l_type.push_len .. '(L, ${' .. var.name .. '},' ..
-						                                    '${' .. var.name .. '_len});\n'
-					end
-					return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
-				end
-				rec._ffi_push = function(self, var)
-					if var.has_length then
-						return 'ffi_string_len(${' .. var.name .. '},${' .. var.name .. '_len})'
-					end
-					return 'ffi_string(${' .. var.name .. '})'
-				end
-				rec._ffi_check = function(self, var)
-					return 'local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
-				end
-				rec._ffi_opt = function(self, var, default)
-					if default then
-						default = (' or %q'):format(tostring(default))
-					else
-						default = ''
-					end
-					return 
-						'${' .. var.name .. '} = ${' .. var.name .. '}' .. default .. '\n' ..
-						'  local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
-				end
+		if l_type == nil then return end
+		rec._ffi_push = function(self, var, flags, unwrap)
+			local wrap = var.ffi_wrap
+			if wrap then
+				return wrap .. '(${' .. var.name .. '})' .. (unwrap or '')
 			else
-				rec._to = function(self, var)
-					return ' ${' .. var.name .. '} = ' .. l_type.to .. '(L,${' .. var.name .. '::idx});\n'
+				return '${' .. var.name .. '}' .. (unwrap or '')
+			end
+		end
+		if rec.lang_type == 'string' then
+			rec._to = function(self, var)
+				return ' ${' .. var.name .. '} = ' ..
+					l_type.to .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
+			end
+			rec._check = function(self, var)
+				return ' ${' .. var.name .. '} = ' ..
+					l_type.check .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
+			end
+			rec._opt = function(self, var, default)
+				if default then
+					default = '"' .. default .. '"'
+				else
+					default = 'NULL'
 				end
-				rec._check = function(self, var)
-					return ' ${' .. var.name .. '} = ' .. l_type.check .. '(L,${' .. var.name .. '::idx});\n'
+				return ' ${' .. var.name .. '} = ' ..
+					l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default ..
+					',&(${' .. var.name .. '_len}));\n'
+			end
+			rec._push = function(self, var)
+				if var.has_length then
+					return
+					'  if(${' .. var.name .. '} == NULL) lua_pushnil(L);' ..
+					'  else ' .. l_type.push_len .. '(L, ${' .. var.name .. '},' ..
+					                                    '${' .. var.name .. '_len});\n'
 				end
-				rec._opt = function(self, var, default)
-					default = default or '0'
-					if l_type.opt then
-						return ' ${' .. var.name .. '} = ' ..
-							l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default .. ');\n'
-					end
+				return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
+			end
+			rec._ffi_push = function(self, var)
+				if var.has_length then
+					return 'ffi_string_len(${' .. var.name .. '},${' .. var.name .. '_len})'
+				end
+				return 'ffi_string(${' .. var.name .. '})'
+			end
+			rec._ffi_check = function(self, var)
+				return 'local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
+			end
+			rec._ffi_opt = function(self, var, default)
+				if default then
+					default = (' or %q'):format(tostring(default))
+				else
+					default = ''
+				end
+				return 
+					'${' .. var.name .. '} = ${' .. var.name .. '}' .. default .. '\n' ..
+					'  local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
+			end
+		else
+			rec._to = function(self, var)
+				return ' ${' .. var.name .. '} = ' .. l_type.to .. '(L,${' .. var.name .. '::idx});\n'
+			end
+			rec._check = function(self, var)
+				return ' ${' .. var.name .. '} = ' .. l_type.check .. '(L,${' .. var.name .. '::idx});\n'
+			end
+			rec._opt = function(self, var, default)
+				default = default or '0'
+				if l_type.opt then
 					return ' ${' .. var.name .. '} = ' ..
-						l_type.to .. '(L,${' .. var.name .. '::idx});\n'
+						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default .. ');\n'
 				end
-				rec._push = function(self, var)
-					return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
-				end
-				rec._ffi_check = function(self, var)
-					return '\n'
-				end
-				rec._ffi_opt = function(self, var, default)
-					default = tostring(default or '0')
-					return 
-						'  ${' .. var.name .. '} = ${' .. var.name .. '} or ' .. default .. '\n'
-				end
+				return ' ${' .. var.name .. '} = ' ..
+					l_type.to .. '(L,${' .. var.name .. '::idx});\n'
+			end
+			rec._push = function(self, var)
+				return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
+			end
+			rec._ffi_check = function(self, var)
+				return '\n'
+			end
+			rec._ffi_opt = function(self, var, default)
+				default = tostring(default or '0')
+				return '  ${' .. var.name .. '} = ${' .. var.name .. '} or ' .. default .. '\n'
 			end
 		end
 	end,
