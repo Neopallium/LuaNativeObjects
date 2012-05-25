@@ -1,11 +1,3 @@
--- define a C callback function prototype:
-callback_type "TestObjFunc" "int" { "TestObj *", "%this", "int", "idx" }
--- callback_type "<callback typedef name>" "<callback return type>" {
---   -- call back function parameters.
---   "<param type>", "%<param name>", -- the '%' marks which parameter holds the wrapped object.
---   "<param type>", "<param name>",
--- }
-
 --
 -- C code for TestObj object
 --
@@ -38,6 +30,14 @@ int testobj_run(TestObj *obj, int run) {
 }
 
 ]]
+
+-- define a C callback function type:
+callback_type "TestObjFunc" "int" { "TestObj *", "%this", "int", "idx" }
+-- callback_type "<callback typedef name>" "<callback return type>" {
+--   -- call back function parameters.
+--   "<param type>", "%<param name>", -- the '%' marks which parameter holds the wrapped object.
+--   "<param type>", "<param name>",
+-- }
 
 object "TestObj" {
 	-- create object
