@@ -4,15 +4,11 @@ local zmq = require"zmq"
 
 local N = tonumber(arg[1] or 1000000)
 
-local test = bench.method_call()
-
 local function run_bench(action_name, N, func)
 
 	local timer = zmq.stopwatch_start()
 	
-	for i=1,N do
-		func()
-	end
+	func()
 	
 	local elapsed = timer:stop()
 	if elapsed == 0 then elapsed = 1 end
@@ -24,12 +20,22 @@ local function run_bench(action_name, N, func)
 	))
 end
 
+--
+-- Run benchmarks of method calls.
+--
+
+local test = bench.method_call()
+
 run_bench('C API method calls', N, function()
-	test:simple()
+	for i=1,N do
+		test:simple()
+	end
 end)
 
 run_bench('null method calls', N, function()
-	test:null()
+	for i=1,N do
+		test:null()
+	end
 end)
 
 
