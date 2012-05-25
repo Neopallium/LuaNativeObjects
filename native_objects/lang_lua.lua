@@ -89,12 +89,16 @@ process_records{
 			end
 		end
 		if rec.lang_type == 'string' then
+			local cast = ''
+			if rec.c_type ~= 'const char *' and rec.c_type ~= 'char *' then
+				cast = '(' .. rec.c_type .. ')'
+			end
 			rec._to = function(self, var)
-				return ' ${' .. var.name .. '} = ' ..
+				return ' ${' .. var.name .. '} = ' .. cast ..
 					l_type.to .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
 			end
 			rec._check = function(self, var)
-				return ' ${' .. var.name .. '} = ' ..
+				return ' ${' .. var.name .. '} = ' .. cast ..
 					l_type.check .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
 			end
 			rec._opt = function(self, var, default)
@@ -103,7 +107,7 @@ process_records{
 				else
 					default = 'NULL'
 				end
-				return ' ${' .. var.name .. '} = ' ..
+				return ' ${' .. var.name .. '} = ' .. cast ..
 					l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default ..
 					',&(${' .. var.name .. '_len}));\n'
 			end
