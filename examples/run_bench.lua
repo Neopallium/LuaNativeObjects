@@ -44,6 +44,7 @@ end)
 --
 
 local function callback(idx)
+	return 0
 end
 local test = bench.TestObj(callback)
 
