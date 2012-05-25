@@ -1648,8 +1648,7 @@ callback_func_end = function(self, rec, parent)
 	local ret_out = rec.ret_out
 	local func_rc = ''
 	if ret_out then
-		local var_type = ret_out.c_type_rec
-		func_rc = var_type.default or ''
+		func_rc = "${" .. ret_out.name .. "}"
 	end
 	rec:write_part("post_src", {
 	'    fprintf(stdout, "CALLBACK Error: %s\\n", lua_tostring(L, -1));\n',
@@ -1945,7 +1944,7 @@ cb_out = function(self, rec, parent)
 	parent.cb_outs = parent.cb_outs + 1
 	local var_type = rec.c_type_rec
 	parent:write_part("vars",
-		{'  ', rec.c_type, ' ${', rec.name, '};\n'})
+		{'  ', rec.c_type, ' ${', rec.name, '} = ', var_type.default,';\n'})
 	parent:write_part("post",
 		{'  ', var_type:_to(rec) })
 end,

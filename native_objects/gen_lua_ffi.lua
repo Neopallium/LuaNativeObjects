@@ -1264,8 +1264,7 @@ callback_func_end = function(self, rec, parent)
 	local ret_out = rec.ret_out
 	local func_rc = ''
 	if ret_out then
-		local var_type = ret_out.c_type_rec
-		func_rc = var_type.default or ''
+		func_rc = 'ret'
 		rec:write_part("ffi_post", {'  return ret\n'})
 	end
 	-- call lua callback function.
