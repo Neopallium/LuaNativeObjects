@@ -2,7 +2,7 @@
 local bench = require"bench"
 local zmq = require"zmq"
 
-local N = tonumber(arg[1] or 1000000)
+local N = tonumber(arg[1] or 10000000)
 
 local function run_bench(action_name, N, func)
 
@@ -38,4 +38,16 @@ run_bench('null method calls', N, function()
 	end
 end)
 
+
+--
+-- Run benchmarks of C callbacks.
+--
+
+local function callback(idx)
+end
+local test = bench.TestObj(callback)
+
+run_bench('C callback', N, function()
+	test:run(N)
+end)
 

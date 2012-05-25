@@ -14,6 +14,7 @@ luajit_ffi_load_cmodule = true,
 
 -- here we include the bindings file for each object into this module.
 subfiles {
-  "bench/method_call.nobj.lua"
+  "bench/method_call.nobj.lua",
+  "bench/callback.nobj.lua"
 }
 }
