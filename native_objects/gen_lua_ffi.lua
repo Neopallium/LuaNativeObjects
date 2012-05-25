@@ -196,6 +196,8 @@ local function ffi_string_len(ptr, len)
 	return nil
 end
 
+local f_cast = ffi.cast
+local pcall = pcall
 local error = error
 local type = type
 local tonumber = tonumber
@@ -293,11 +295,11 @@ local nobj_weak_objects = setmetatable({}, {__mode = "v"})
 local nobj_obj_flags = {}
 
 local function obj_ptr_to_id(ptr)
-	return tonumber(ffi.cast('uintptr_t', ptr))
+	return tonumber(f_cast('uintptr_t', ptr))
 end
 
 local function obj_to_id(ptr)
-	return tonumber(ffi.cast('uintptr_t', ffi.cast('void *', ptr)))
+	return tonumber(f_cast('uintptr_t', f_cast('void *', ptr)))
 end
 
 local function register_default_constructor(_pub, obj_name, constructor)
@@ -1257,8 +1259,7 @@ callback_func_end = function(self, rec, parent)
 	local wrapped_type = wrapped.c_type_rec
 	local wrap_type = parent.wrap_type .. ' *'
 	rec:write_part("ffi_cb_head",
-	{'  local id = obj_ptr_to_id(', wrapped_type:_ffi_push(wrapped) ,')\n',
-	 '  local wrap = nobj_callback_states[id]\n',
+	{'  local wrap = nobj_callback_states[obj_ptr_to_id(${', wrapped.name ,'})]\n',
 	})
 	-- generate code for return value from lua function.
 	local ret_out = rec.ret_out
