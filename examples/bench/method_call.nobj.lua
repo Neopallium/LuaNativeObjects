@@ -34,7 +34,7 @@ int method_call_null(method_call *call) {
 ]],
 		ffi_source[[
 	if(${this} == nil) then
-		error(string.format("INVALID PTR: %s != %s", tostring(${this}), tostring(DEFAULT_PTR)));
+		error(string.format("INVALID PTR: %p == nil", ${this}));
 	end
 ]],
   },
