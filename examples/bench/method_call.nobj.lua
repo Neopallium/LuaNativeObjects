@@ -32,6 +32,11 @@ int method_call_null(method_call *call) {
 		luaL_error(L, "INVALID PTR: %p != %p", ${this}, DEFAULT_PTR);
 	}
 ]],
+		ffi_source[[
+	if(${this} == nil) then
+		error(string.format("INVALID PTR: %s != %s", tostring(${this}), tostring(DEFAULT_PTR)));
+	end
+]],
   },
 
   method "null" {
