@@ -1361,12 +1361,7 @@ c_function_end = function(self, rec, parent)
 		local callbacks = wrap_obj.callbacks
 		if rec.is_destructor then
 			rec:write_part("ffi_pre",
-				{'  local id = obj_ptr_to_id(${this})\n',
-				 '  local wrap = nobj_callback_states[id]\n'})
-			for name,cb in pairs(callbacks) do
-				rec:write_part("ffi_src",
-					{'  wrap.', name,' = nil\n'})
-			end
+				{'  local id = obj_ptr_to_id(${this})\n'})
 			rec:write_part("ffi_post",
 				{'  nobj_callback_states[id] = nil\n',
 				 '  C.nobj_ffi_',wrap_obj.base_type,'_free(${this})\n',
