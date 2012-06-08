@@ -322,7 +322,7 @@ static FUNC_UNUSED obj_udata *obj_udata_luacheck_internal(lua_State *L, int _ind
 				return ud;
 			}
 		}
-	} else {
+	} else if(!lua_isnil(L, _index)) {
 		/* handle cdata. */
 		/* get private table. */
 		lua_pushlightuserdata(L, obj_udata_private_key);
@@ -331,16 +331,21 @@ static FUNC_UNUSED obj_udata *obj_udata_luacheck_internal(lua_State *L, int _ind
 		lua_pushlightuserdata(L, type);
 		lua_rawget(L, -2);
 
-		/* pass cdata value to type checking function. */
-		lua_pushvalue(L, _index);
-		lua_call(L, 1, 1);
+		/* check for function. */
 		if(!lua_isnil(L, -1)) {
-			/* valid type get pointer from cdata. */
+			/* pass cdata value to type checking function. */
+			lua_pushvalue(L, _index);
+			lua_call(L, 1, 1);
+			if(!lua_isnil(L, -1)) {
+				/* valid type get pointer from cdata. */
+				lua_pop(L, 2);
+				*obj = *(void **)lua_topointer(L, _index);
+				return ud;
+			}
 			lua_pop(L, 2);
-			*obj = *(void **)lua_topointer(L, _index);
-			return ud;
+		} else {
+			lua_pop(L, 1);
 		}
-		lua_pop(L, 2);
 	}
 	if(not_delete) {
 		luaL_typerror(L, _index, type->name); /* is not a userdata value. */
@@ -356,7 +361,7 @@ static FUNC_UNUSED void *obj_udata_luacheck(lua_State *L, int _index, obj_type *
 
 static FUNC_UNUSED void *obj_udata_luaoptional(lua_State *L, int _index, obj_type *type) {
 	void *obj = NULL;
-	if(lua_gettop(L) < _index) {
+	if(lua_isnil(L, _index)) {
 		return obj;
 	}
 	obj_udata_luacheck_internal(L, _index, &(obj), type, 1);
@@ -546,7 +551,7 @@ static FUNC_UNUSED void * obj_simple_udata_luacheck(lua_State *L, int _index, ob
 				return ud;
 			}
 		}
-	} else {
+	} else if(!lua_isnil(L, _index)) {
 		/* handle cdata. */
 		/* get private table. */
 		lua_pushlightuserdata(L, obj_udata_private_key);
@@ -555,22 +560,24 @@ static FUNC_UNUSED void * obj_simple_udata_luacheck(lua_State *L, int _index, ob
 		lua_pushlightuserdata(L, type);
 		lua_rawget(L, -2);
 
-		/* pass cdata value to type checking function. */
-		lua_pushvalue(L, _index);
-		lua_call(L, 1, 1);
+		/* check for function. */
 		if(!lua_isnil(L, -1)) {
-			/* valid type get pointer from cdata. */
-			lua_pop(L, 2);
-			return (void *)lua_topointer(L, _index);
+			/* pass cdata value to type checking function. */
+			lua_pushvalue(L, _index);
+			lua_call(L, 1, 1);
+			if(!lua_isnil(L, -1)) {
+				/* valid type get pointer from cdata. */
+				lua_pop(L, 2);
+				return (void *)lua_topointer(L, _index);
+			}
 		}
-		lua_pop(L, 2);
 	}
 	luaL_typerror(L, _index, type->name); /* is not a userdata value. */
 	return NULL;
 }
 
 static FUNC_UNUSED void * obj_simple_udata_luaoptional(lua_State *L, int _index, obj_type *type) {
-	if(lua_gettop(L) < _index) {
+	if(lua_isnil(L, _index)) {
 		return NULL;
 	}
 	return obj_simple_udata_luacheck(L, _index, type);
