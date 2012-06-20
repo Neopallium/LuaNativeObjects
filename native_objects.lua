@@ -1327,13 +1327,17 @@ local function process_module_file(file)
 		parent:add_variable(rec)
 	end,
 	var_out = function(self, rec, parent)
-		parent:add_variable(rec)
+		if not rec.is_length_ref then
+			parent:add_variable(rec)
+		end
 	end,
 	cb_in = function(self, rec, parent)
 		parent:add_variable(rec)
 	end,
 	cb_out = function(self, rec, parent)
-		parent:add_variable(rec)
+		if not rec.is_length_ref then
+			parent:add_variable(rec)
+		end
 	end,
 	c_call = function(self, rec, parent)
 		local src={}
@@ -1385,9 +1389,9 @@ local function process_module_file(file)
 					end
 					-- register var_out variable.
 					parent:add_variable(rc)
-					-- add var_out record to parent
-					parent:add_record(rc)
 				end
+				-- add var_out record to parent
+				parent:add_record(rc)
 				-- check for dereference.
 				if rc.wrap == '*' then
 					ret = ret .. '*'
