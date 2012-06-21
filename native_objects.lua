@@ -174,10 +174,6 @@ end
 end
 end
 
-function external_docs(rec)
-	return make_record(rec, 'external_docs')
-end
-
 function doc(text)
 	return make_record({ text = text }, 'doc')
 end

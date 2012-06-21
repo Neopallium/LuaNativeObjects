@@ -265,10 +265,6 @@ c_function_end = function(self, rec, parent)
 end,
 c_source = function(self, rec, parent)
 end,
-doc_export = function(self, rec, parent)
-end,
-doc_source = function(self, rec, parent)
-end,
 var_in = function(self, rec, parent)
 	-- no need to add code for 'lua_State *' parameters.
 	if rec.c_type == 'lua_State *' and rec.name == 'L' then return end
