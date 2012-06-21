@@ -1957,7 +1957,7 @@ cb_out = function(self, rec, parent)
 end,
 }
 
-local src_file=open_outfile('.c')
+local src_file=open_outfile(nil, '.c')
 local function src_write(...)
 	src_file:write(...)
 end

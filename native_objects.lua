@@ -1,4 +1,4 @@
--- Copyright (c) 2010 by Robert G. Jakabosky <bobby@neoawareness.com>
+-- Copyright (c) 2012 by Robert G. Jakabosky <bobby@neoawareness.com>
 --
 -- Permission is hereby granted, free of charge, to any person obtaining a copy
 -- of this software and associated documentation files (the "Software"), to deal
@@ -159,6 +159,14 @@ function basetype(name)
 	return rec
 end
 end
+end
+
+function external_docs(rec)
+	return make_record(rec, 'external_docs')
+end
+
+function doc(text)
+	return make_record({ text = text }, 'doc')
 end
 
 function error_code(name)
@@ -904,14 +912,17 @@ function get_outfile_name(ext)
 	local filename = module_file .. ext
 	return outpath .. filename
 end
-function open_outfile(ext)
-	local filename = module_file .. ext
+function open_outfile(filename, ext)
+	local filename = (filename or module_file) .. (ext or '')
 	local file = outfiles[filename]
 	if file == nil then
-		file = io.open(outpath .. filename, "w+")
+		file = assert(io.open(outpath .. filename, "w+"))
 		outfiles[filename] = file
 	end
 	return file
+end
+function get_outpath(path)
+	return (outpath or './') .. (path or '')
 end
 function close_outfiles()
 	for name,file in pairs(outfiles) do
@@ -1361,7 +1372,7 @@ local function process_module_file(file)
 			else
 				local rc
 				if type(ret) == 'string' then
-					rc = var_out{ ret, "rc_" .. rec.cfunc }
+					rc = var_out{ ret, "rc_" .. rec.cfunc, is_unnamed = true }
 				else
 					rc = var_out(ret)
 				end

@@ -19,7 +19,6 @@
 -- THE SOFTWARE.
 
 dottify = require"dotlua"
-require"utils"
 
 --
 -- dump records
@@ -95,6 +94,5 @@ end,
 --]=]
 }
 
-print(dump(root))
 dottify(get_outfile_name(".dot"), root, "nometatables", "noupvalues", "values")
 

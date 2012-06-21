@@ -367,7 +367,7 @@ cb_out = function(self, rec, parent)
 end,
 }
 
-local src_file=open_outfile('.i')
+local src_file=open_outfile(nil, '.i')
 local function src_write(...)
 	src_file:write(...)
 end
