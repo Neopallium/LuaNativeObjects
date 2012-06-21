@@ -57,6 +57,7 @@ basetype "lua_State *"    "thread" "NULL"
 basetype "void"           "nil" "NULL"
 
 basetype "<any>"          "nil" "NULL"
+basetype "<table>"        "table" "NULL"
 
 --
 -- to/check/push/delete methods

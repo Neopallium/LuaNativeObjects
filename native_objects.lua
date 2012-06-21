@@ -24,9 +24,18 @@ package.path = package.path .. native_objects_path
 
 require("record")
 
-local tinsert=table.insert
-local tappend=function(dst,src) for _,v in pairs(src) do dst[#dst+1] = v end end
 local tconcat=table.concat
+local tremove=table.remove
+local assert=assert
+local error=error
+local type=type
+local table=table
+local io=io
+local print=print
+local pairs=pairs
+local dofile=dofile
+local tostring=tostring
+local require=require
 
 --
 -- Switch language we are generating bindings for.
@@ -55,7 +64,12 @@ local function strip_c_type(c_type)
 end
 
 function new_c_type(c_type, rec)
-	c_types[strip_c_type(c_type)] = rec
+	c_type = strip_c_type(c_type)
+	local old = c_types[c_type]
+	if old and old ~= rec then
+		print("WARNING changing c_type:", c_type, "from:", old, "to:", rec)
+	end
+	c_types[c_type] = rec
 end
 
 local function real_c_type_resolver(self)
@@ -127,7 +141,7 @@ function resolve_c_type(c_type)
 	return resolver
 end
 
-local function resolve_rec(rec)
+function resolve_rec(rec)
 	if rec.c_type ~= nil and rec.c_type_rec == nil then
 		rec.c_type_rec = resolve_c_type(rec.c_type)
 	end
@@ -151,7 +165,7 @@ function basetype(name)
 	return function (lang_type)
 	return function (default)
 	-- make it an basetype record.
-	rec = ctype(name,{},"basetype")
+	local rec = ctype(name,{},"basetype")
 	-- lang type
 	rec.lang_type = lang_type
 	-- default value
@@ -184,7 +198,7 @@ end
 function object(name)
 	return function (rec)
 	-- make it an object record.
-	userdata_type = rec.userdata_type or 'generic'
+	local userdata_type = rec.userdata_type or 'generic'
 	rec.userdata_type = userdata_type
 	rec.has_obj_flags = true
 	if userdata_type == 'generic' or userdata_type == 'embed' or userdata_type == 'simple ptr' then
@@ -339,7 +353,7 @@ end
 end
 
 function constants(values)
-	rec = make_record({}, "constants")
+	local rec = make_record({}, "constants")
 	rec.values = values
 	return rec
 end
@@ -354,7 +368,7 @@ function export_definitions(values)
 			})
 		end
 	end
-	rec = make_record({}, "export_definitions")
+	local rec = make_record({}, "export_definitions")
 	rec.values = values
 	return rec
 end
@@ -473,7 +487,7 @@ end
 
 function define(name)
 	return function(value)
-	rec = make_record({}, "define")
+	local rec = make_record({}, "define")
 	rec.name = name
 	rec.value = value
 	return rec
@@ -486,7 +500,7 @@ function c_source(part)
 		src = part
 		part = nil
 	end
-	rec = make_record({}, "c_source")
+	local rec = make_record({}, "c_source")
 	rec.part = part or "src"
 	rec.src = src
 	return rec
@@ -567,9 +581,9 @@ end
 function var_out(rec)
 	rec = make_record(rec, "var_out")
 	-- out variable's c_type
-	rec.c_type = table.remove(rec, 1)
+	rec.c_type = tremove(rec, 1)
 	-- out variable's name
-	rec.name = table.remove(rec, 1)
+	rec.name = tremove(rec, 1)
 	-- parse tags from name.
 	parse_variable_name(rec)
 	resolve_rec(rec)
@@ -579,9 +593,9 @@ end
 function var_in(rec)
 	rec = make_record(rec, "var_in")
 	-- in variable's c_type
-	rec.c_type = table.remove(rec, 1)
+	rec.c_type = tremove(rec, 1)
 	-- in variable's name
-	rec.name = table.remove(rec, 1)
+	rec.name = tremove(rec, 1)
 	-- parse tags from name.
 	parse_variable_name(rec)
 	resolve_rec(rec)
@@ -688,7 +702,7 @@ end
 function callback_type(name)
 	return function (return_type)
 	return function (params)
-	rec = make_record({}, "callback_type")
+	local rec = make_record({}, "callback_type")
 	rec.is_callback = true
 	-- function type name.
 	rec.name = name
@@ -713,7 +727,7 @@ function callback(c_type)
 		rec.is_ref = true
 		rec.ref_field = rec.name
 		-- other variable that will be wrapped to hold callback state information.
-		rec.state_var = table.remove(rec, 1)
+		rec.state_var = tremove(rec, 1)
 		return rec
 	end
 	return function (name)
@@ -727,9 +741,9 @@ function callback_state(base_type)
 	-- cleanup base_type
 	base_type = base_type:gsub("[ *]","")
 	-- create name for new state type
-	name = base_type .. "_cb_state"
+	local name = base_type .. "_cb_state"
 	-- make it an callback_state record.
-	rec = make_record({}, "callback_state")
+	local rec = make_record({}, "callback_state")
 	-- the wrapper type
 	rec.wrap_type = name
 	-- base_type we are wrapping.
@@ -745,7 +759,7 @@ end
 
 function callback_func(c_type)
 	return function (name)
-	rec = make_record({}, "callback_func")
+	local rec = make_record({}, "callback_func")
 	rec.is_ref = true
 	rec.ref_field = name
 	-- c_type for callback.
@@ -762,9 +776,9 @@ end
 function cb_out(rec)
 	rec = make_record(rec, "cb_out")
 	-- out variable's c_type
-	rec.c_type = table.remove(rec, 1)
+	rec.c_type = tremove(rec, 1)
 	-- out variable's name
-	rec.name = table.remove(rec, 1)
+	rec.name = tremove(rec, 1)
 	resolve_rec(rec)
 	return rec
 end
@@ -772,9 +786,9 @@ end
 function cb_in(rec)
 	rec = make_record(rec, "cb_in")
 	-- in variable's c_type
-	rec.c_type = table.remove(rec, 1)
+	rec.c_type = tremove(rec, 1)
 	-- in variable's name
-	local name = table.remove(rec, 1)
+	local name = tremove(rec, 1)
 	-- check if this is a wrapped object parameter.
 	if name:sub(1,1) == '%' then
 		rec.is_wrapped_obj = true;
@@ -824,7 +838,7 @@ function ffi_source(part)
 		src = part
 		part = nil
 	end
-	rec = make_record({}, "ffi_source")
+	local rec = make_record({}, "ffi_source")
 	rec.part = part or "ffi_src"
 	rec.src = src
 	return rec
@@ -876,7 +890,7 @@ end
 
 function ffi_export(c_type)
 	return function (name)
-	rec = make_record({}, "ffi_export")
+	local rec = make_record({}, "ffi_export")
 	-- parse c_type.
 	rec.c_type = c_type
 	-- parse name of symbol to export
@@ -888,7 +902,7 @@ end
 function ffi_export_function(return_type)
 	return function (name)
 	return function (params)
-	rec = make_record({}, "ffi_export_function")
+	local rec = make_record({}, "ffi_export_function")
 	-- parse return c_type.
 	rec.ret = return_type or "void"
 	-- parse c function to call.
