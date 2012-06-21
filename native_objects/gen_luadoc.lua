@@ -44,21 +44,25 @@ __index = '__index',
 __newindex = '__newindex',
 }
 
-print"============ Lua Documentation ================="
-
 local function ctype_to_name(ctype)
 	if ctype.lang_type == 'userdata' then
 	elseif ctype.lang_type == 'function' then
 		return "Lua function"
 	else
-		return ctype.lang_type
+		return ctype.lang_type or ctype.name
 	end
 	return ctype.name
 end
 
-local function var_to_typename(var)
-	return ctype_to_name(var.c_type_rec)
+function get_type_link(rec)
+	if rec._rec_type == 'object' then
+		return '<a href="' .. rec.name .. '.html">' .. rec.name ..'</a>'
+	else
+		return '<code>' .. ctype_to_name(rec) .. '</code>'
+	end
 end
+
+print"============ Lua Documentation ================="
 
 local parsed = process_records{
 _modules_out = {},
@@ -97,7 +101,7 @@ object = function(self, rec, parent)
 	self._cur_module.objects[rec.name] = rec
 	rec:add_var('object_name', rec.name)
 	parent:write_part("doc_footer", {
-		'-- <br />Class <a href="', rec.name, '.html">', rec.name,'</a>\n',
+		'-- <br />Class ', get_type_link(rec),'\n',
 	})
 	rec:write_part("doc_header", {
 		'--- Class "${object_name}".\n',
@@ -143,10 +147,10 @@ extends = function(self, rec, parent)
 	local base = rec.base
 	if base == nil then return end
 	parent:write_part("doc_footer", {
-		'-- Extends <a href="', base.name, '.html">', base.name,'</a><br />\n',
+		'-- Extends ', get_type_link(base),'<br />\n',
 	})
 	base:write_part("doc_subclasses", {
-		'-- Subclass <a href="', parent.name, '.html">', parent.name,'</a><br />\n',
+		'-- Subclass ', get_type_link(parent),'<br />\n',
 	})
 	-- add methods/fields/constants from base object
 	for name,val in pairs(base.name_map) do
@@ -220,7 +224,7 @@ c_function = function(self, rec, parent)
 			prefix = "${object_name}:"
 		end
 	else
-		desc = "module function"
+		desc = "module function."
 		prefix = "${object_name}."
 	end
 	-- generate luadoc stub function
@@ -270,10 +274,13 @@ var_in = function(self, rec, parent)
 	if rec.c_type == 'lua_State *' and rec.name == 'L' then return end
 	if rec.is_this then return end
 	local desc = ''
+	if rec.desc then
+		desc = rec.desc .. '.  '
+	end
 	if rec.c_type == '<any>' then
-		desc = "Multiple types accepted."
+		desc = desc .. "Multiple types accepted."
 	else
-		desc = "Must be of type `" .. var_to_typename(rec) .. "`."
+		desc = desc .."Must be of type " .. get_type_link(rec.c_type_rec) .. "."
 	end
 	parent:write_part("doc_footer",
 		{'-- @param ', rec.name, ' ', desc, '\n'})
@@ -284,7 +291,7 @@ var_out = function(self, rec, parent)
 	end
 	-- push Lua value onto the stack.
 	local error_code = parent._has_error_code
-	local var_type = var_to_typename(rec)
+	local var_type = get_type_link(rec.c_type_rec)
 	if error_code == rec then
 		if rec._rec_idx == 1 then
 			parent:write_part("doc_footer", {
@@ -298,16 +305,16 @@ var_out = function(self, rec, parent)
 		end
 	elseif rec.no_nil_on_error ~= true and error_code then
 		parent:write_part("doc_footer", {
-			'-- @return <code>', var_type, '</code> or <code>nil</code> on error.\n',
+			'-- @return ', var_type, ' or <code>nil</code> on error.\n',
 			})
 	elseif rec.is_error_on_null then
 		parent:write_part("doc_footer", {
-			'-- @return <code>', var_type, '</code> or <code>nil</code> on error.\n',
+			'-- @return ', var_type, ' or <code>nil</code> on error.\n',
 			'-- @return Error string.\n',
 			})
 	else
 		parent:write_part("doc_footer", {
-			'-- @return <code>', var_type, '</code>.\n',
+			'-- @return ', var_type, '.\n',
 			})
 	end
 end,
