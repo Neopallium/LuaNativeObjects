@@ -572,7 +572,9 @@ c_call = function(self, rec, parent)
 	ffi_cdef[#ffi_cdef+1] = ");\n"
 	ffi_src[#ffi_src+1] = ")"
 	-- replace `c_call` with `c_source` record
-	local idx = parent:replace_record(rec, c_source("src")(src))
+	local idx = parent:find_record(rec)
+	idx = idx + 1
+	parent:insert_record(c_source("src")(src), idx)
 	-- convert to string.
 	ffi_cdef = tconcat(ffi_cdef)
 	-- check for ffi cdefs re-definitions
@@ -603,7 +605,8 @@ c_call = function(self, rec, parent)
 		-- function not defined yet.
 		parent:insert_record(ffi_source("ffi_cdef")(ffi_cdef), idx)
 	end
-	parent:insert_record(ffi_source("ffi_src")(ffi_src), idx+1)
+	idx = idx + 1
+	parent:insert_record(ffi_source("ffi_src")(ffi_src), idx)
 end,
 ffi_export = function(self, rec, parent)
 	local ffi_src={}
@@ -731,4 +734,7 @@ var_out = function(self, rec, parent)
 	end
 end,
 })
+
+-- register place-holder
+reg_stage_parser("pre_gen")
 
