@@ -77,7 +77,7 @@ local lua_base_types = {
 		{ to = 'lua_touserdata', check = 'lua_touserdata', push = 'lua_pushlightuserdata' },
 }
 
-process_records{
+reg_stage_parser("lang_type_process", {
 	basetype = function(self, rec, parent)
 		local l_type = lua_base_types[rec.lang_type]
 		if l_type == nil then return end
@@ -262,5 +262,5 @@ process_records{
 			return 'lua_rawgeti(L, LUA_REGISTRYINDEX, ' .. var .. ');\n'
 		end
 	end,
-}
+})
 
