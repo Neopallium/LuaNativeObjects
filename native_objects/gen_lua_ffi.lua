@@ -960,6 +960,7 @@ c_module_end = function(self, rec, parent)
 			"ffi_pre_cdef", "ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
 			"ffi_metas_regs", "ffi_extends"
 		}
+		rec:write_part("ffi_code_lua", ffi_code)
 		rec:write_part("ffi_code",
 			dump_lua_code_to_c_str(ffi_code, '${module_c_name}_ffi_lua_code'))
 		rec:vars_part("ffi_code")
@@ -1088,6 +1089,7 @@ object_end = function(self, rec, parent)
 			"ffi_pre_cdef", "ffi_typedef", "ffi_cdef", "ffi_obj_type", "ffi_import", "ffi_src",
 			"ffi_metas_regs", "ffi_extends"
 		}
+		rec:write_part("ffi_code_lua", ffi_code)
 		rec:write_part("ffi_code",
 			dump_lua_code_to_c_str(ffi_code, '${module_c_name}_${object_name}_ffi_lua_code'))
 		-- copy ffi_code to partent
@@ -1600,6 +1602,17 @@ cb_out = function(self, rec, parent)
 		{'  ', var_type:_ffi_opt(rec) })
 end,
 }
+
+local src_file=open_outfile(nil, '.ffi.lua')
+local function src_write(...)
+	src_file:write(...)
+end
+
+for name,mod in pairs(parsed._modules_out) do
+	src_write(
+		mod:dump_parts({ "ffi_code_lua",})
+	)
+end
 
 print("Finished generating LuaJIT FFI bindings")
 
