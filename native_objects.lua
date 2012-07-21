@@ -507,7 +507,7 @@ local function strip_variable_tokens(val, tokens)
 	return prefix .. (tokens or '') .. postfix, val
 end
 
-local function clean_variable_type_name(vtype,vname)
+function clean_variable_type_name(vtype,vname)
 	local tokens
 	tokens, vtype = strip_variable_tokens(vtype)
 	tokens, vname = strip_variable_tokens(vname)
