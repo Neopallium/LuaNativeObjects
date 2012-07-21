@@ -82,6 +82,9 @@ unknown = function(self, rec, parent)
 end,
 })
 
+-- register place-holder
+reg_stage_parser("resolve_types")
+
 --
 -- convert fields into get/set methods.
 --

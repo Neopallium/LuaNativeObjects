@@ -84,6 +84,7 @@ local function real_c_type_resolver(self)
 		print("Unkown type: " .. c_type)
 	end
 	rawset(self, "_type", _type)
+	_type._in_use = true
 	return _type
 end
 local resolve_meta = {
@@ -140,11 +141,27 @@ function resolve_c_type(c_type)
 	return resolver
 end
 
+local function is_resolver(val)
+	return (getmetatable(val) == resolve_meta)
+end
+
 function resolve_rec(rec)
 	if rec.c_type ~= nil and rec.c_type_rec == nil then
 		rec.c_type_rec = resolve_c_type(rec.c_type)
 	end
 end
+
+reg_stage_parser("resolve_types", {
+unknown = function(self, rec, parent)
+	-- find all c_type resolvers.
+	for key,val in pairs(rec) do
+		-- force all types to be resolved.
+		if is_resolver(val) then
+			rec[key] = real_c_type_resolver(val)
+		end
+	end
+end,
+})
 
 --
 -- Record functions -- Used to create new records.
