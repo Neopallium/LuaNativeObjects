@@ -1747,7 +1747,7 @@ c_function_end = function(self, rec, parent)
 		local wrap_type = wrap_obj.wrap_type
 		local callbacks = wrap_obj.callbacks
 		if rec.is_destructor then
-			rec:write_part("pre",
+			rec:write_part("pre_src",
 				{'  wrap = (',wrap_type,' *)${this};\n'})
 			for name,cb in pairs(callbacks) do
 				rec:write_part("src",
@@ -1799,27 +1799,30 @@ var_in = function(self, rec, parent)
 			parent:write_part("pre",
 				{
 				'  int ',flags,' = 0;\n',
-				'  ', rec.c_type, var_type:_delete(rec, '&(' .. flags .. ')'),
+				'  ', var_type:_define(rec)
 				})
 			parent:write_part("pre_src", {
+				'  ',var_type:_delete(rec, '&(' .. flags .. ')'),
 				'  if(!(',flags,' & OBJ_UDATA_FLAG_OWN)) { return 0; }\n',
 				})
 		else
 			-- for garbage collect method, check the ownership flag before freeing 'this' object.
 			parent:write_part("pre",
 				{
-				'  ', rec.c_type, var_type:_delete(rec, false),
+				'  ', var_type:_define(rec),
+				})
+			parent:write_part("pre_src",
+				{
+				'  ', var_type:_delete(rec, false),
 				})
 		end
 	elseif var_type._rec_type ~= 'callback_func' then
 		if var_type.lang_type == 'string' then
 			-- add length ${var_name_len} variable
 			parent:add_rec_var(rec, rec.name .. '_len')
-			-- add a variable to top of function for string's length.
-			parent:write_part("pre",{
-				'  size_t ${', rec.name ,'_len};\n'
-			})
 		end
+		parent:write_part("pre",
+			{'  ', var_type:_define(rec) })
 		-- check lua value matches type.
 		local get
 		if rec.is_optional then
@@ -1827,8 +1830,8 @@ var_in = function(self, rec, parent)
 		else
 			get = var_type:_check(rec)
 		end
-		parent:write_part("pre",
-			{'  ', rec.c_type, get })
+		parent:write_part("pre_src",
+			{'  ', get })
 	end
 	-- is a lua reference.
 	if var_type.is_ref then
@@ -1972,6 +1975,7 @@ src_write[[
 #include "lualib.h"
 
 ]]
+
 for name,mod in pairs(parsed._modules_out) do
 	src_write(
 		mod:dump_parts({

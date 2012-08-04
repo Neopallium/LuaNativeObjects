@@ -95,11 +95,15 @@ reg_stage_parser("lang_type_process", {
 				cast = '(' .. rec.c_type .. ')'
 			end
 			rec._to = function(self, var)
-				return ' ${' .. var.name .. '} = ' .. cast ..
+				return '${' .. var.name .. '} = ' .. cast ..
 					l_type.to .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
 			end
+			rec._define = function(self, var)
+				return 'size_t ${' .. var.name .. '_len};\n' ..
+				'  ' .. var.c_type .. ' ${' .. var.name .. '};\n'
+			end
 			rec._check = function(self, var)
-				return ' ${' .. var.name .. '} = ' .. cast ..
+				return '${' .. var.name .. '} = ' .. cast ..
 					l_type.check .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
 			end
 			rec._opt = function(self, var, default)
@@ -108,7 +112,7 @@ reg_stage_parser("lang_type_process", {
 				else
 					default = 'NULL'
 				end
-				return ' ${' .. var.name .. '} = ' .. cast ..
+				return '${' .. var.name .. '} = ' .. cast ..
 					l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default ..
 					',&(${' .. var.name .. '_len}));\n'
 			end
@@ -120,6 +124,9 @@ reg_stage_parser("lang_type_process", {
 					                                    '${' .. var.name .. '_len});\n'
 				end
 				return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
+			end
+			rec._ffi_define = function(self, var)
+				return ''
 			end
 			rec._ffi_push = function(self, var)
 				if var.has_length then
@@ -142,29 +149,35 @@ reg_stage_parser("lang_type_process", {
 			end
 		else
 			rec._to = function(self, var)
-				return ' ${' .. var.name .. '} = ' .. l_type.to .. '(L,${' .. var.name .. '::idx});\n'
+				return '${' .. var.name .. '} = ' .. l_type.to .. '(L,${' .. var.name .. '::idx});\n'
+			end
+			rec._define = function(self, var)
+				return var.c_type .. ' ${' .. var.name .. '};\n'
 			end
 			rec._check = function(self, var)
-				return ' ${' .. var.name .. '} = ' .. l_type.check .. '(L,${' .. var.name .. '::idx});\n'
+				return '${' .. var.name .. '} = ' .. l_type.check .. '(L,${' .. var.name .. '::idx});\n'
 			end
 			rec._opt = function(self, var, default)
 				default = default or '0'
 				if l_type.opt then
-					return ' ${' .. var.name .. '} = ' ..
+					return '${' .. var.name .. '} = ' ..
 						l_type.opt .. '(L,${' .. var.name .. '::idx},' .. default .. ');\n'
 				end
-				return ' ${' .. var.name .. '} = ' ..
+				return '${' .. var.name .. '} = ' ..
 					l_type.to .. '(L,${' .. var.name .. '::idx});\n'
 			end
 			rec._push = function(self, var)
 				return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
+			end
+			rec._ffi_define = function(self, var)
+				return ''
 			end
 			rec._ffi_check = function(self, var)
 				return '\n'
 			end
 			rec._ffi_opt = function(self, var, default)
 				default = tostring(default or '0')
-				return '  ${' .. var.name .. '} = ${' .. var.name .. '} or ' .. default .. '\n'
+				return '${' .. var.name .. '} = ${' .. var.name .. '} or ' .. default .. '\n'
 			end
 		end
 	end,
@@ -188,17 +201,20 @@ reg_stage_parser("lang_type_process", {
 		rec._obj_type_name = type_name
 
 		-- create _check/_delete/_push functions
+		rec._define = function(self, var)
+			return var.c_type .. ' ${'..var.name..'};\n'
+		end
 		rec._check = function(self, var)
-			return ' ${'..var.name..'} = '..type_name..'_check(L,${'..var.name..'::idx});\n'
+			return '${'..var.name..'} = '..type_name..'_check(L,${'..var.name..'::idx});\n'
 		end
 		rec._opt = function(self, var)
-			return ' ${'..var.name..'} = '..type_name..'_optional(L,${'..var.name..'::idx});\n'
+			return '${'..var.name..'} = '..type_name..'_optional(L,${'..var.name..'::idx});\n'
 		end
 		rec._delete = function(self, var, flags)
 			if not flags then
-				return ' ${'..var.name..'} = '..type_name..'_delete(L,${'..var.name..'::idx});\n'
+				return '${'..var.name..'} = '..type_name..'_delete(L,${'..var.name..'::idx});\n'
 			end
-			return ' ${'..var.name..'} = '..type_name..'_delete(L,${'..var.name..'::idx},'..flags..');\n'
+			return '${'..var.name..'} = '..type_name..'_delete(L,${'..var.name..'::idx},'..flags..');\n'
 		end
 		rec._to = rec._check
 		rec._push = function(self, var, flags)
@@ -207,6 +223,9 @@ reg_stage_parser("lang_type_process", {
 			end
 			if flags == nil then flags = '0' end
 			return '  '..type_name..'_push(L, ${'..var.name..'}, ' .. flags .. ');\n'
+		end
+		rec._ffi_define = function(self, var)
+			return ''
 		end
 		rec._ffi_check = function(self, var)
 			if not rec.subs then
