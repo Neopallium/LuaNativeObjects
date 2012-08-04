@@ -555,10 +555,7 @@ do
 	end
 
 	-- type checking function for C API.
-	_priv[obj_type] = function(obj)
-		if ffi.istype(obj_ctype, obj) then return obj._wrapped_val end
-		return nil
-	end
+	_priv[obj_type] = obj_type_${object_name}_check
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr, flags)
 		return obj_type_${object_name}_push(ffi.cast('uintptr_t',ptr), flags)
@@ -615,10 +612,7 @@ ${dyn_caster}
 	end
 
 	-- type checking function for C API.
-	_priv[obj_type] = function(ptr)
-		if ffi.istype(obj_ctype, ptr) then return ptr end
-		return nil
-	end
+	_priv[obj_type] = obj_type_${object_name}_check
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr, flags)
 		return obj_type_${object_name}_push(ffi.cast(obj_ctype,ptr), flags)
@@ -678,10 +672,7 @@ ${dyn_caster}
 	end
 
 	-- type checking function for C API.
-	_priv[obj_type] = function(ptr)
-		if ffi.istype(obj_ctype, ptr) then return ptr end
-		return nil
-	end
+	_priv[obj_type] = obj_type_${object_name}_check
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr, flags)
 		return obj_type_${object_name}_push(ffi.cast(obj_ctype,ptr), flags)
