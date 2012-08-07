@@ -74,19 +74,17 @@ interface_end = function(self, rec, parent)
 /* a per-module unique pointer for fast lookup of an interface's implementation table. */
 static char obj_interface_${interface_name}IF[] = "${interface_name}IF";
 
-typedef struct {
-	${interface_name}IF *impl;
-	void *obj;
-} ${interface_name}Impl;
-
 #define ${interface_name}IF_VAR(var_name) \
-	${interface_name}Impl var_name;
+	${interface_name}IF *var_name ## _if; \
+	void *var_name;
 
 #define ${interface_name}IF_LUA_OPTIONAL(L, _index, var_name) \
-	obj_implement_luaoptional(L, _index, (obj_implement *)&(var_name), obj_interface_${interface_name}IF)
+	var_name = obj_implement_luaoptional(L, _index, (void **)&(var_name ## _if), \
+		obj_interface_${interface_name}IF)
 
 #define ${interface_name}IF_LUA_CHECK(L, _index, var_name) \
-	obj_implement_luacheck(L, _index, (obj_implement *)&(var_name), obj_interface_${interface_name}IF)
+	var_name = obj_implement_luacheck(L, _index, (void **)&(var_name ## _if), \
+		obj_interface_${interface_name}IF)
 
 ]])
 
@@ -152,11 +150,6 @@ interface_method = function(self, rec, parent)
 	rec.func_name = "${object_name}_${interface_name}_" .. rec.name
 	rec.func_decl = rec.ret .. " " .. rec.func_name .. psrc
 	rec.param_names = names
-
-	parent:write_part("defines", {
-		"\n#define ${interface_name}IF_", rec.name, "(_obj", names, ") \\\n",
-		"  _obj.impl->", rec.name, "(_obj.obj", names, ")\n"
-	})
 end,
 implements = function(self, rec, parent)
 	local interface = rec.interface_rec

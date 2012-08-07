@@ -853,12 +853,10 @@ typedef struct {
 	void *obj;
 } obj_implement;
 
-static FUNC_UNUSED bool obj_implement_luaoptional(lua_State *L, int _index, obj_implement *impl,
-		char *if_name)
-{
+static FUNC_UNUSED void *obj_implement_luaoptional(lua_State *L, int _index, void **impl, char *if_name) {
 	void *ud;
 	if(lua_isnoneornil(L, _index)) {
-		return false;
+		return NULL;
 	}
 	/* get the implements table for this interface. */
 	lua_pushlightuserdata(L, if_name);
@@ -895,27 +893,28 @@ static FUNC_UNUSED bool obj_implement_luaoptional(lua_State *L, int _index, obj_
 	}
 
 	if(!lua_isnil(L, -1)) {
-		impl->impl = lua_touserdata(L, -1);
+		*impl = lua_touserdata(L, -1);
 		lua_pop(L, 2); /* pop interface table & implementation. */
 		/* object implements interface. */
-		impl->obj = ud;
-		return true;
+		return ud;
 	} else {
 		lua_pop(L, 1); /* pop nil. */
 	}
 no_interface:
 	lua_pop(L, 1); /* pop interface table. */
-	return false;
+	return NULL;
 }
 
-static FUNC_UNUSED void obj_implement_luacheck(lua_State *L, int _index, obj_implement *impl, char *type) {
-	if(!obj_implement_luaoptional(L, _index, impl, type)) {
+static FUNC_UNUSED void *obj_implement_luacheck(lua_State *L, int _index, void **impl, char *type) {
+	void *ud = obj_implement_luaoptional(L, _index, impl, type);
+	if(ud == NULL) {
 #define ERROR_BUFFER_SIZE 256
 		char buf[ERROR_BUFFER_SIZE];
 		snprintf(buf, ERROR_BUFFER_SIZE-1,"Expected object with %s interface", type);
 		/* value doesn't implement this interface. */
 		luaL_argerror(L, _index, buf);
 	}
+	return ud;
 }
 
 /* use static pointer as key to interfaces table. (version 1.0) */
