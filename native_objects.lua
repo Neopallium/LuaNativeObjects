@@ -248,6 +248,51 @@ function object(name)
 end
 end
 
+function interface(name)
+	return function (rec)
+	local rec = ctype(name, rec,"interface")
+	rec.name = name
+	rec.is_interface = true
+	return rec
+end
+end
+
+function interface_method(return_type)
+	return function (name)
+	return function (params)
+	local rec = make_record({}, "interface_method")
+	rec.is_interface_method = true
+	-- function type name.
+	rec.name = name
+	-- parse return c_type.
+	rec.ret = return_type or "void"
+	-- parse params
+	if params == nil then params = {} end
+	rec.params = params
+	return rec
+end
+end
+end
+
+function implements(name)
+	return function (rec)
+	local rec = make_record(rec, "implements")
+	rec.is_implements = true
+	-- interface name
+	rec.name = name
+	rec.interface_rec = resolve_c_type(rec.name)
+	return rec
+end
+end
+
+function implement_method(name)
+	return function (rec)
+	local rec = make_record(rec, "implement_method")
+	rec.name = name
+	return rec
+end
+end
+
 function submodule(name)
 	return function (rec)
 	rec = object(name)(rec)
@@ -967,6 +1012,11 @@ local function process_module_file(file)
 	-- load language module
 	--
 	require("native_objects.lang_" .. gen_lang)
+
+	--
+	-- load basic interfaces
+	--
+	require("native_objects.interfaces")
 
 	module_file = file:gsub("(.lua)$","")
 	print("module_file", module_file)

@@ -198,6 +198,11 @@ typedef enum {
 	REG_META,
 } module_reg_type;
 
+typedef struct reg_impl {
+	const char *if_name;
+	const void *impl;
+} reg_impl;
+
 typedef struct reg_sub_module {
 	obj_type        *type;
 	module_reg_type req_type;
@@ -207,6 +212,7 @@ typedef struct reg_sub_module {
 	const obj_base  *bases;
 	const obj_field *fields;
 	const obj_const *constants;
+	const reg_impl  *implements;
 	int             bidirectional_consts;
 } reg_sub_module;
 
@@ -818,6 +824,8 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 
 	obj_type_register_constants(L, type_reg->constants, -2, type_reg->bidirectional_consts);
 
+	obj_type_register_implements(L, type_reg->implements);
+
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -3);               /* dup methods table */
 	lua_rawset(L, -3);                  /* metatable.__index = methods */
@@ -834,6 +842,187 @@ static FUNC_UNUSED int lua_checktype_ref(lua_State *L, int _index, int _type) {
 	luaL_checktype(L,_index,_type);
 	lua_pushvalue(L,_index);
 	return luaL_ref(L, LUA_REGISTRYINDEX);
+}
+
+]]
+
+local interfaceHelperFunc = [[
+
+typedef struct {
+	void *impl;
+	void *obj;
+} obj_implement;
+
+static FUNC_UNUSED bool obj_implement_luaoptional(lua_State *L, int _index, obj_implement *impl,
+		char *if_name)
+{
+	void *ud;
+	if(lua_gettop(L) < _index || lua_isnil(L, _index)) {
+		return false;
+	}
+	/* get the implements table for this interface. */
+	lua_pushlightuserdata(L, if_name);
+	lua_rawget(L, LUA_REGISTRYINDEX);
+
+	/* get pointer to userdata value & check if it is a userdata value. */
+	ud = (obj_implement *)lua_touserdata(L, _index);
+	if(ud != NULL) {
+		/* get the userdata's metatable */
+		if(lua_getmetatable(L, _index)) {
+			/* lookup metatable in interface table for this object's implementation of the interface. */
+			lua_gettable(L, -2);
+		} else {
+			/* no metatable. */
+			goto no_interface;
+		}
+#if LUAJIT_FFI
+	} else if(nobj_ffi_support_enabled_hint) { /* handle cdata. */
+		/* get cdata interface check function from interface table. */
+		lua_getfield(L, -1, "cdata");
+		if(lua_isfunction(L, -1)) {
+			/* pass cdata to function, return value should be an implmentation. */
+			lua_pushvalue(L, _index);
+			lua_call(L, 1, 1);
+			/* get pointer to cdata. */
+			ud = (void *)lua_topointer(L, _index);
+		} else {
+			lua_pop(L, 1); /* pop non-function. */
+			goto no_interface;
+		}
+#endif
+	} else {
+		goto no_interface;
+	}
+
+	if(!lua_isnil(L, -1)) {
+		impl->impl = lua_touserdata(L, -1);
+		lua_pop(L, 2); /* pop interface table & implementation. */
+		/* object implements interface. */
+		impl->obj = ud;
+		return true;
+	} else {
+		lua_pop(L, 1); /* pop nil. */
+	}
+no_interface:
+	lua_pop(L, 1); /* pop interface table. */
+	return false;
+}
+
+static FUNC_UNUSED void obj_implement_luacheck(lua_State *L, int _index, obj_implement *impl, char *type) {
+	if(!obj_implement_luaoptional(L, _index, impl, type)) {
+#define ERROR_BUFFER_SIZE 256
+		char buf[ERROR_BUFFER_SIZE];
+		snprintf(buf, ERROR_BUFFER_SIZE-1,"Expected object with %s interface", type);
+		/* value doesn't implement this interface. */
+		luaL_argerror(L, _index, buf);
+	}
+}
+
+/* use static pointer as key to interfaces table. (version 1.0) */
+static char obj_interfaces_table_key[] = "obj_interfaces<1.0>_table_key";
+
+static void obj_get_global_interfaces_table(lua_State *L) {
+	/* get global interfaces table. */
+	lua_getfield(L, LUA_REGISTRYINDEX, obj_interfaces_table_key);
+	if(lua_isnil(L, -1)) {
+		/* Need to create global interfaces table. */
+		lua_pop(L, 1); /* pop nil */
+		lua_createtable(L, 0, 4); /* 0 size array part, small hash part. */
+		lua_pushvalue(L, -1); /* dup table. */
+		/* store interfaces table in Lua registery. */
+		lua_setfield(L, LUA_REGISTRYINDEX, obj_interfaces_table_key);
+	}
+}
+
+static void obj_get_interface(lua_State *L, const char *name, int global_if_tab) {
+	/* get a interface's implementation table */
+	lua_getfield(L, global_if_tab, name);
+	if(lua_isnil(L, -1)) {
+		lua_pop(L, 1); /* pop nil */
+		/* new interface. (i.e. no object implement it yet.)
+		 *
+		 * create an empty table for this interface that will be used when an
+		 * implementation is registered for this interface.
+		 */
+		lua_createtable(L, 0, 2); /* 0 size array part, small hash part. */
+		lua_pushvalue(L, -1); /* dup table. */
+		lua_setfield(L, global_if_tab, name); /* store interface in global interfaces table. */
+	}
+}
+
+static int obj_get_userdata_interface(lua_State *L) {
+	/* get the userdata's metatable */
+	if(lua_getmetatable(L, 2)) {
+		/* lookup metatable in interface table for the userdata's implementation of the interface. */
+		lua_gettable(L, 1);
+		if(!lua_isnil(L, -1)) {
+			/* return the implementation. */
+			return 1;
+		}
+	}
+	/* no metatable or no implementation. */
+	return 0;
+}
+
+static void obj_interface_register(lua_State *L, char *name, int global_if_tab) {
+	/* get the table of implementations for this interface. */
+	obj_get_interface(L, name, global_if_tab);
+
+	/* check for 'userdata' function. */
+	lua_getfield(L, -1, "userdata");
+	if(lua_isnil(L, -1)) {
+		lua_pop(L, 1); /* pop nil. */
+		/* add C function for getting a userdata's implementation. */
+		lua_pushcfunction(L, obj_get_userdata_interface);
+		lua_setfield(L, -2, "userdata");
+	} else {
+		/* already have function. */
+		lua_pop(L, 1); /* pop C function. */
+	}
+	/* we are going to use a lightuserdata pointer for fast lookup of the interface's impl. table. */
+	lua_pushlightuserdata(L, name);
+	lua_insert(L, -2);
+	lua_settable(L, LUA_REGISTRYINDEX);
+}
+
+static void obj_register_interfaces(lua_State *L, char *interfaces[]) {
+	int i;
+	int if_tab;
+	/* get global interfaces table. */
+	obj_get_global_interfaces_table(L);
+	if_tab = lua_gettop(L);
+
+	for(i = 0; interfaces[i] != NULL ; i++) {
+		obj_interface_register(L, interfaces[i], if_tab);
+	}
+	lua_pop(L, 1); /* pop global interfaces table. */
+}
+
+static void obj_type_register_implement(lua_State *L, const reg_impl *impl, int global_if_tab, int mt_tab) {
+	/* get the table of implementations for this interface. */
+	obj_get_interface(L, impl->if_name, global_if_tab);
+
+	/* register object's implement in the interface table. */
+	lua_pushvalue(L, mt_tab);
+	lua_pushlightuserdata(L, (void *)impl->impl);
+	lua_settable(L, -3);
+
+	lua_pop(L, 1); /* pop inteface table. */
+}
+
+static void obj_type_register_implements(lua_State *L, const reg_impl *impls) {
+	int if_tab;
+	int mt_tab;
+	/* get absolute position of object's metatable. */
+	mt_tab = lua_gettop(L);
+	/* get global interfaces table. */
+	obj_get_global_interfaces_table(L);
+	if_tab = lua_gettop(L);
+
+	for(; impls->if_name != NULL ; impls++) {
+		obj_type_register_implement(L, impls, if_tab, mt_tab);
+	}
+	lua_pop(L, 1); /* pop global interfaces table. */
 }
 
 ]]
@@ -939,6 +1128,9 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 	const reg_sub_module *reg = reg_sub_modules;
 	const luaL_Reg *submodules = submodule_libs;
 	int priv_table = -1;
+
+	/* register interfaces */
+	obj_register_interfaces(L, obj_interfaces);
 
 	/* private table to hold reference to object metatables. */
 	lua_newtable(L);
@@ -1157,6 +1349,7 @@ end
 
 print"============ Lua bindings ================="
 local parsed = process_records{
+_interfaces_out = {},
 _modules_out = {},
 _includes = {},
 
@@ -1211,7 +1404,7 @@ c_module_end = function(self, rec, parent)
 	})
 	-- end module/object register array.
 	rec:write_part("reg_sub_modules", {
-	'  {NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0}\n',
+	'  {NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0}\n',
 	'};\n\n'
 	})
 	-- end submodule_libs array
@@ -1239,15 +1432,17 @@ c_module_end = function(self, rec, parent)
 	-- add main luaopen function.
 	rec:add_var("module_init_src", rec:dump_parts{ "module_init_src"})
 	rec:write_part("luaopen", luaopen_main)
+	rec:write_part("helper_funcs", interfaceHelperFunc)
 	rec:write_part("helper_funcs", objHelperFunc)
 	-- append extra source code.
 	rec:write_part("extra_code", rec:dump_parts{ "src" })
 	-- combine reg arrays into one part.
 	local arrays = {
-		"function_regs", "methods_regs", "metas_regs", "base_regs", "field_regs", "const_regs"}
+		"function_regs", "methods_regs", "metas_regs", "base_regs", "field_regs", "const_regs", "implement_regs"
+	}
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = { "defines", "typedefs", "funcdefs", "reg_sub_modules", "submodule_regs",
+	local parts = { "defines", "typedefs", "implements", "funcdefs", "reg_sub_modules", "submodule_regs",
 		"submodule_libs", "helper_funcs", "extra_code", "methods", "reg_arrays", "luaopen_defs",
 		"luaopen"}
 	rec:vars_parts(parts)
@@ -1288,6 +1483,18 @@ error_code_end = function(self, rec, parent)
 	parent:write_part("methods", rec:dump_parts{ "src" })
 
 end,
+interface_end = function(self, rec, parent)
+	if rec.is_global then
+		self._interfaces_out[rec.name] = rec
+		return
+	end
+	-- apply variables to parts
+	local parts = { "defines", "funcdefs", "typedefs" }
+	rec:vars_parts(parts)
+	-- copy parts to parent
+	parent:copy_parts(rec, parts)
+
+end,
 object = function(self, rec, parent)
 	rec:add_var('object_name', rec.name)
 	-- make luaL_reg arrays for this object
@@ -1312,6 +1519,8 @@ object = function(self, rec, parent)
 	end
 	rec:write_part("const_regs",
 		{'static const obj_const obj_${object_name}_constants[] = {\n'})
+	rec:write_part("implement_regs",
+		{'static const reg_impl obj_${object_name}_implements[] = {\n'})
 	rec.functions_regs = 'pub_funcs_regs'
 	rec:write_part("pub_funcs_regs",
 		{'static const luaL_reg obj_${object_name}_pub_funcs[] = {\n'})
@@ -1402,6 +1611,10 @@ object_end = function(self, rec, parent)
 	'  {NULL, NULL, 0.0 , 0}\n',
 	'};\n\n'
 	})
+	rec:write_part("implement_regs", {
+	'  {NULL, NULL}\n',
+	'};\n\n'
+	})
 	rec:write_part("pub_funcs_regs", {
 	'  {NULL, NULL}\n',
 	'};\n\n'
@@ -1419,18 +1632,19 @@ object_end = function(self, rec, parent)
 	if rec.is_meta then
 		object_reg_info = {
 		'  { ', type_info_ptr, ', REG_META, obj_${object_name}_pub_funcs, obj_${object_name}_methods, ',
-			'obj_${object_name}_metas, NULL, NULL, obj_${object_name}_constants, ',bidirectional,'}'
+			'obj_${object_name}_metas, NULL, NULL, obj_${object_name}_constants, NULL, ',bidirectional,'}'
 		}
 	elseif rec.is_package then
 		object_reg_info = {
 		'  { ', type_info_ptr, ', REG_PACKAGE, obj_${object_name}_pub_funcs, NULL, ',
-			'NULL, NULL, NULL, obj_${object_name}_constants, ',bidirectional,'}'
+			'NULL, NULL, NULL, obj_${object_name}_constants, NULL, ',bidirectional,'}'
 		}
 	else
 		object_reg_info = {
 		'  { ', type_info_ptr, ', REG_OBJECT, obj_${object_name}_pub_funcs, ',
 			'obj_${object_name}_methods, obj_${object_name}_metas, obj_${object_name}_bases, ',
-			'obj_${object_name}_fields, obj_${object_name}_constants, ',bidirectional,'}'
+			'obj_${object_name}_fields, obj_${object_name}_constants, obj_${object_name}_implements, ',
+			bidirectional,'}'
 		}
 	end
 
@@ -1456,11 +1670,11 @@ object_end = function(self, rec, parent)
 	-- combine reg arrays into one part.
 	local arrays = {
 		"function_regs", "pub_funcs_regs", "methods_regs", "metas_regs",
-		"base_regs", "field_regs", "const_regs"
+		"base_regs", "field_regs", "const_regs", "implement_regs"
 	}
 	rec:write_part("reg_arrays", rec:dump_parts(arrays))
 	-- apply variables to parts
-	local parts = { "defines", "funcdefs", "methods", "obj_check_delete_push",
+	local parts = { "defines", "implements", "funcdefs", "methods", "obj_check_delete_push",
 		"obj_types", "reg_arrays", "reg_sub_modules", "submodule_regs", "submodule_libs",
 		"luaopen_defs", "luaopen", "extra_code" }
 	rec:vars_parts(parts)
@@ -1985,6 +2199,42 @@ for name,mod in pairs(parsed._modules_out) do
 			"funcdefs",
 			"obj_types",
 			"helper_funcs",
+			}, "\n\n")
+	)
+end
+
+local interfaces = {}
+for name,interface in pairs(parsed._interfaces_out) do
+	-- only output code for in-use interfaces.
+	if interface._in_use then
+		src_write(
+			interface:dump_parts({
+				"defines",
+				"typedefs",
+				}, "\n\n")
+		)
+		interfaces[#interfaces + 1] = interface.name
+	end
+end
+
+src_write([[
+static char *obj_interfaces[] = {
+]])
+for i=1,#interfaces do
+	local name = interfaces[i]
+	src_write('  obj_interface_', name, 'IF,\n')
+end
+
+src_write([[
+  NULL,
+};
+
+]])
+
+for name,mod in pairs(parsed._modules_out) do
+	src_write(
+		mod:dump_parts({
+			"implements",
 			"obj_check_delete_push",
 			"extra_code",
 			"methods",

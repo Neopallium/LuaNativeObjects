@@ -53,6 +53,7 @@ basetype "double"         "number" "0.0"
 basetype "char *"         "string" "NULL"
 basetype "unsigned char *" "string" "NULL"
 basetype "void *"         "lightuserdata" "NULL"
+basetype "uint8_t *"      "lightuserdata" "NULL"
 basetype "lua_State *"    "thread" "NULL"
 basetype "void"           "nil" "NULL"
 
@@ -266,6 +267,45 @@ reg_stage_parser("lang_type_process", {
 			rec._ffi_push_error = function(self, var)
 				return rec.error_on_null
 			end
+		end
+	end,
+	interface = function(self, rec, parent)
+		rec.lang_type = 'userdata'
+		local if_name = rec.name
+
+		-- create _check/_delete/_push functions
+		rec._define = function(self, var)
+			return if_name..'IF_VAR(${'..var.name..'});\n'
+		end
+		rec._check = function(self, var)
+			return if_name..'IF_LUA_CHECK(L,${'..var.name..'::idx}, ${'..var.name..'});\n'
+		end
+		rec._opt = function(self, var)
+			return if_name..'IF_LUA_OPTIONAL(L,${'..var.name..'::idx}, ${'..var.name..'});\n'
+		end
+		rec._delete = function(self, var, flags)
+			error("Can't delete an interface object.")
+		end
+		rec._to = rec._check
+		rec._push = function(self, var, flags)
+			error("Can't push an interface object.")
+		end
+		rec._ffi_define = function(self, var)
+			return 'local ${' .. var.name .. '}_if'
+		end
+		rec._ffi_check = function(self, var)
+			local name = '${' .. var.name .. '}'
+			return name .. '_if = obj_type_'..if_name..'_check('..name..')\n'
+		end
+		rec._ffi_opt = function(self, var)
+			local name = '${' .. var.name .. '}'
+			return name .. '_if = '..name..' and obj_type_'..if_name..'_check('..name..') or nil\n'
+		end
+		rec._ffi_delete = function(self, var, has_flags)
+			error("Can't delete an interface object.")
+		end
+		rec._ffi_push = function(self, var, flags, unwrap)
+			error("Can't push an interface object.")
 		end
 	end,
 	callback_func = function(self, rec, parent)

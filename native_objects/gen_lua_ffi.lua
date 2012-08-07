@@ -343,11 +343,7 @@ do
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
 
-	local obj_mt = _priv.${object_name}
-	local obj_type = obj_mt['.type']
-	local obj_ctype = ffi.typeof("${object_name}_t")
-	_ctypes.${object_name} = obj_ctype
-	_type_names.${object_name} = tostring(obj_ctype)
+	local obj_mt, obj_type, obj_ctype = obj_register_ctype("${object_name}", "${object_name}_t")
 
 	function obj_type_${object_name}_check(obj)
 		return obj._wrapped_val
@@ -397,11 +393,7 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local obj_mt = _priv.${object_name}
-	local obj_type = obj_mt['.type']
-	local obj_ctype = ffi.typeof("${object_name} *")
-	_ctypes.${object_name} = obj_ctype
-	_type_names.${object_name} = tostring(obj_ctype)
+	local obj_mt, obj_type, obj_ctype = obj_register_ctype("${object_name}", "${object_name} *")
 
 	function obj_type_${object_name}_check(ptr)
 		return ptr
@@ -453,11 +445,7 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local obj_mt = _priv.${object_name}
-	local obj_type = obj_mt['.type']
-	local obj_ctype = ffi.typeof("${object_name}")
-	_ctypes.${object_name} = obj_ctype
-	_type_names.${object_name} = tostring(obj_ctype)
+	local obj_mt, obj_type, obj_ctype = obj_register_ctype("${object_name}", "${object_name}")
 	local ${object_name}_sizeof = ffi.sizeof"${object_name}"
 
 	function obj_type_${object_name}_check(obj)
@@ -510,11 +498,7 @@ do
 		typedef struct ${object_name}_t ${object_name}_t;
 	]=])
 
-	local obj_mt = _priv.${object_name}
-	local obj_type = obj_mt['.type']
-	local obj_ctype = ffi.typeof("${object_name}_t")
-	_ctypes.${object_name} = obj_ctype
-	_type_names.${object_name} = tostring(obj_ctype)
+	local obj_mt, obj_type, obj_ctype = obj_register_ctype("${object_name}", "${object_name}_t")
 
 	function obj_type_${object_name}_check(obj)
 		-- if obj is nil or is the correct type, then just return it.
@@ -571,11 +555,7 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local obj_mt = _priv.${object_name}
-	local obj_type = obj_mt['.type']
-	local obj_ctype = ffi.typeof("${object_name} *")
-	_ctypes.${object_name} = obj_ctype
-	_type_names.${object_name} = tostring(obj_ctype)
+	local obj_mt, obj_type, obj_ctype = obj_register_ctype("${object_name}", "${object_name} *")
 
 	function obj_type_${object_name}_check(ptr)
 		-- if ptr is nil or is the correct type, then just return it.
@@ -628,11 +608,7 @@ local obj_type_${object_name}_delete
 local obj_type_${object_name}_push
 
 do
-	local obj_mt = _priv.${object_name}
-	local obj_type = obj_mt['.type']
-	local obj_ctype = ffi.typeof("${object_name} *")
-	_ctypes.${object_name} = obj_ctype
-	_type_names.${object_name} = tostring(obj_ctype)
+	local obj_mt, obj_type, obj_ctype = obj_register_ctype("${object_name}", "${object_name} *")
 
 	function obj_type_${object_name}_check(ptr)
 		-- if ptr is nil or is the correct type, then just return it.
@@ -715,13 +691,12 @@ local ffi_obj_type_check = {
 }
 
 -- module template
-local ffi_module_template = [[
+local ffi_module_template = [==[
+local _obj_interfaces_ffi = {}
 local _pub = {}
 local _meth = {}
 local _push = {}
 local _obj_subs = {}
-local _type_names = {}
-local _ctypes = {}
 for obj_name,mt in pairs(_priv) do
 	if type(mt) == 'table' then
 		_obj_subs[obj_name] = {}
@@ -734,7 +709,105 @@ for obj_name,pub in pairs(_M) do
 	_pub[obj_name] = pub
 end
 
-]]
+--
+-- CData Metatable access
+--
+local _ctypes = {}
+local _type_names = {}
+local _get_mt_key = {}
+local _ctype_meta_map = {}
+
+local f_typeof = ffi.typeof
+local function get_cdata_type_id(cdata)
+	return tonumber(f_typeof(cdata))
+end
+local function get_cdata_mt(cdata)
+	return _ctype_meta_map[tonumber(f_typeof(cdata))]
+end
+
+local function obj_register_ctype(name, ctype)
+	local obj_mt = _priv[name]
+	local obj_type = obj_mt['.type']
+	local obj_ctype = ffi.typeof(ctype)
+	local obj_type_id = tonumber(obj_ctype)
+	_ctypes[name] = obj_ctype
+	_type_names[name] = tostring(obj_ctype)
+	_ctype_meta_map[obj_type_id] = obj_mt
+	_ctype_meta_map[obj_mt] = obj_type_id
+	return obj_mt, obj_type, obj_ctype
+end
+
+--
+-- Interfaces helper code.
+--
+local _obj_interfaces_key = "obj_interfaces<1.0>_table_key"
+local _obj_interfaces_ud = reg_table[_obj_interfaces_key]
+local _obj_interfaces_key_ffi = _obj_interfaces_key .. "_LJ2_FFI"
+_obj_interfaces_ffi = reg_table[_obj_interfaces_key_ffi]
+if not _obj_interfaces_ffi then
+	-- create missing interfaces table for FFI bindings.
+	_obj_interfaces_ffi = {}
+	reg_table[_obj_interfaces_key_ffi] = _obj_interfaces_ffi
+end
+
+local function obj_get_userdata_interface(if_name, expected_err)
+	local impls_ud = _obj_interfaces_ud[if_name]
+	if not impls_ud then
+		impls_ud = {}
+		_obj_interfaces_ud[if_name] = impls_ud
+	end
+	-- create cdata check function to be used by non-ffi bindings.
+	if not impls_ud.cdata then
+		function impls_ud.cdata(obj)
+			return assert(impls_ud[get_cdata_mt(obj)], expected_err)
+		end
+	end
+	return impls_ud
+end
+
+local function obj_get_interface_check(if_name, expected_err)
+	local impls_ffi = _obj_interfaces_ffi[if_name]
+	if not impls_ffi then
+		local if_type = ffi.typeof(if_name .. " *")
+		local impls_ud = obj_get_userdata_interface(if_name, expected_err)
+		-- create table for FFI-based interface implementations.
+		impls_ffi = setmetatable({}, {
+		__index = function(impls_ffi, mt)
+			local impl = impls_ud[mt]
+			if impl then
+				-- cast to cdata
+				impl = if_type(impl)
+				rawset(impls_ffi, mt, impl)
+			end
+			return impl
+		end})
+		_obj_interfaces_ffi[if_name] = impls_ffi
+
+		-- create check function for this interface.
+		function impls_ffi.check(obj)
+			local impl
+			if type(obj) == 'cdata' then
+				impl = impls_ffi[get_cdata_type_id(obj)]
+			else
+				impl = impls_ud.userdata(impls_ffi, obj)
+			end
+			return assert(impl, expected_err)
+		end
+	end
+	return impls_ffi.check
+end
+
+local function obj_register_interface(if_name, obj_name)
+	-- loopkup cdata id
+	local obj_mt = _priv[obj_name]
+	local obj_type_id = _ctype_meta_map[obj_mt]
+	local impl_meths = {}
+	local ffi_impls = _obj_interfaces_ffi[if_name]
+	ffi_impls[obj_type_id] = impl_meths
+	return impl_meths
+end
+
+]==]
 
 local ffi_submodule_template = ffi_module_template
 
@@ -868,6 +941,7 @@ end,
 }
 
 local parsed = process_records{
+_interfaces_out = {},
 _modules_out = {},
 _includes = {},
 
@@ -924,6 +998,11 @@ local C = Cmod
 end,
 c_module_end = function(self, rec, parent)
 	self._cur_module = nil
+	-- import global interfaces.
+	local interface_parts = { "ffi_pre_cdef", "ffi_obj_type" }
+	for _,interface in pairs(self._interfaces_out) do
+		rec:copy_parts(interface, interface_parts)
+	end
 	-- end list of FFI symbols
 	rec:write_part("ffi_export", {
 	'  {NULL, { NULL } }\n',
@@ -985,6 +1064,12 @@ end
 	local ffi_parts = { "ffi_pre_cdef", "ffi_typedef", "ffi_cdef", "ffi_src" }
 	rec:vars_parts(ffi_parts)
 	parent:copy_parts(rec, ffi_parts)
+end,
+interface_end = function(self, rec, parent)
+	if rec.is_global then
+		self._interfaces_out[rec.name] = rec
+		return
+	end
 end,
 object = function(self, rec, parent)
 	rec:add_var('object_name', rec.name)
