@@ -804,6 +804,7 @@ local function obj_register_interface(if_name, obj_name)
 	local impl_meths = {}
 	local ffi_impls = _obj_interfaces_ffi[if_name]
 	ffi_impls[obj_type_id] = impl_meths
+	_meth[obj_name]['NOBJ_get_' .. if_name] = impl_meths
 	return impl_meths
 end
 

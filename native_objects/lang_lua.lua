@@ -295,11 +295,13 @@ reg_stage_parser("lang_type_process", {
 		end
 		rec._ffi_check = function(self, var)
 			local name = '${' .. var.name .. '}'
-			return name .. '_if = obj_type_'..if_name..'_check('..name..')\n'
+			return name .. '_if = '..name..'.NOBJ_get_'..if_name..'IF'
+				..' or obj_type_'..if_name..'_check('..name..')\n'
 		end
 		rec._ffi_opt = function(self, var)
 			local name = '${' .. var.name .. '}'
-			return name .. '_if = '..name..' and obj_type_'..if_name..'_check('..name..') or nil\n'
+			return name .. '_if = '..name..' and ('..name..'.NOBJ_get_'..if_name..'IF'
+				..' or obj_type_'..if_name..'_check('..name..')) or nil\n'
 		end
 		rec._ffi_delete = function(self, var, has_flags)
 			error("Can't delete an interface object.")
