@@ -151,7 +151,7 @@ static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
 local module_init_src = [[
 #if LUAJIT_FFI
 	if(nobj_check_ffi_support(L)) {
-		nobj_try_loading_ffi(L, "${module_c_name}", ${module_c_name}_ffi_lua_code,
+		nobj_try_loading_ffi(L, "${module_c_name}.nobj.ffi.lua", ${module_c_name}_ffi_lua_code,
 			${module_c_name}_ffi_export, priv_table);
 	}
 #endif
@@ -325,6 +325,7 @@ local function register_default_constructor(_pub, obj_name, constructor)
 		_G[obj_name] = obj_pub
 	end
 end
+
 ]===]
 
 -- templates for typed *_check/*_delete/*_push functions
@@ -954,7 +955,7 @@ c_module_end = function(self, rec, parent)
 		rec:write_part("ffi_code_lua", ffi_code)
 		rec:write_part("ffi_code",
 			dump_lua_code_to_c_str(ffi_code, '${module_c_name}_ffi_lua_code'))
-		rec:vars_part("ffi_code")
+		rec:vars_parts({"ffi_code", "ffi_code_lua"})
 		add_source(rec, "extra_code", rec:dump_parts("ffi_code"))
 	end
 end,
