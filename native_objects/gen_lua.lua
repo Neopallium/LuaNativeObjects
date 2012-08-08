@@ -2080,17 +2080,26 @@ var_out = function(self, rec, parent)
 	end
 
 	local var_type = rec.c_type_rec
-	if var_type.lang_type == 'string' and rec.has_length then
+	local init = ''
+	if var_type.lang_type == 'string' and (rec.has_length or rec.need_buffer) then
 		-- add length ${var_name_len} variable
 		parent:add_rec_var(rec, rec.name .. '_len')
-		-- the C code will provide the string's length.
-		parent:write_part("pre",{
-			'  size_t ${', rec.name ,'_len} = 0;\n'
-		})
+		local buf_len = rec.need_buffer
+		if buf_len then
+			parent:write_part("pre",{
+				'  size_t ${', rec.name ,'_len} = ', buf_len - 1, ';\n',
+				'  char ${', rec.name ,'}_buf[', buf_len,'];\n'
+			})
+			init = ' = ${' .. rec.name .. '}_buf'
+		else
+			-- the C code will provide the string's length.
+			parent:write_part("pre",{
+				'  size_t ${', rec.name ,'_len} = 0;\n'
+			})
+		end
 	end
 	-- if the variable's type has a default value, then initialize the variable.
-	local init = ''
-	if var_type.default then
+	if var_type.default and init == '' then
 		init = ' = ' .. tostring(var_type.default)
 	elseif var_type.userdata_type == 'embed' then
 		parent:write_part("pre",

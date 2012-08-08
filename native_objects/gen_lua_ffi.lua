@@ -1590,16 +1590,24 @@ var_out = function(self, rec, parent)
 	end
 
 	local var_type = rec.c_type_rec
-	if var_type.lang_type == 'string' and rec.has_length then
+	local init = ''
+	if var_type.lang_type == 'string' and (rec.has_length or rec.need_buffer) then
 		-- add length ${var_name_len} variable
 		parent:add_rec_var(rec, rec.name .. '_len')
-		-- the function's code will provide the string's length.
-		parent:write_part("ffi_pre",{
-			'  local ${', rec.name ,'_len} = 0\n'
-		})
+		local buf_len = rec.need_buffer
+		if buf_len then
+			parent:write_part("ffi_pre",{
+				'  local ${', rec.name ,'_len} = ', buf_len - 1, '\n'
+			})
+			init = ' = ffi.new("char[?]", ' .. buf_len .. ')'
+		else
+			-- the function's code will provide the string's length.
+			parent:write_part("ffi_pre",{
+				'  local ${', rec.name ,'_len} = 0\n'
+			})
+		end
 	end
 	-- if the variable's type has a default value, then initialize the variable.
-	local init = ''
 	local default = var_type.default
 	if default and default ~= 'NULL' then
 		init = ' = ' .. tostring(default)
