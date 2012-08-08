@@ -146,7 +146,7 @@ reg_stage_parser("lang_type_process", {
 				end
 				return 
 					'${' .. var.name .. '} = ${' .. var.name .. '}' .. default .. '\n' ..
-					'  local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'
+					'  local ${' .. var.name .. '_len} = ${' .. var.name .. '} and #${' .. var.name .. '} or 0\n'
 			end
 		else
 			rec._to = function(self, var)
