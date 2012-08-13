@@ -20,7 +20,7 @@
 
 -- add path of native_objects.lua to package.path
 local native_objects_path=(arg[0]):gsub("native_objects.lua", "?.lua;")
-package.path = package.path .. native_objects_path
+package.path = package.path .. ";" .. native_objects_path
 
 require("record")
 
