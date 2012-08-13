@@ -1,6 +1,6 @@
 #!/bin/sh
-#
-DIR=`realpath $0`
+
+which realpath && DIR=`realpath $0` || DIR=`readlink -f "$0"`
 DIR=`dirname $DIR`
 
 if [ -z "$LUA_PATH" ] ; then
