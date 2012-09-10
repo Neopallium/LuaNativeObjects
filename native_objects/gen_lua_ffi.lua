@@ -1202,7 +1202,8 @@ callback_state = function(self, rec, parent)
 	rec:add_var('wrap_type', rec.wrap_type)
 	rec:add_var('base_type', rec.base_type)
 	-- generate allocate function for base type.
-	rec:write_part("extra_code", [[
+	if rec.wrap_state then
+		rec:write_part("extra_code", [[
 
 /* object allocation function for FFI bindings. */
 ${base_type} *nobj_ffi_${base_type}_new() {
@@ -1215,8 +1216,9 @@ void nobj_ffi_${base_type}_free(${base_type} *obj) {
 }
 
 ]])
-	rec:write_part("ffi_cdef", "${base_type} *nobj_ffi_${base_type}_new();\n")
-	rec:write_part("ffi_cdef", "void nobj_ffi_${base_type}_free(${base_type} *obj);\n")
+		rec:write_part("ffi_cdef", "${base_type} *nobj_ffi_${base_type}_new();\n")
+		rec:write_part("ffi_cdef", "void nobj_ffi_${base_type}_free(${base_type} *obj);\n")
+	end
 end,
 callback_state_end = function(self, rec, parent)
 	-- apply variables to parts
@@ -1434,25 +1436,37 @@ c_function_end = function(self, rec, parent)
 	-- don't generate FFI bindings
 	if self._cur_module.ffi_manual_bindings then return end
 
-	-- is this a wrapper function
-	if rec.wrapper_obj then
-		local wrap_obj = rec.wrapper_obj
-		local wrap_type = wrap_obj.wrap_type
-		local callbacks = wrap_obj.callbacks
+	-- is there callback state
+	if rec.callback_state then
+		local wrap_obj = rec.callback_state
 		if rec.is_destructor then
 			rec:write_part("ffi_pre",
 				{'  local id = obj_ptr_to_id(${this})\n'})
 			rec:write_part("ffi_post",
-				{'  nobj_callback_states[id] = nil\n',
-				 '  C.nobj_ffi_',wrap_obj.base_type,'_free(${this})\n',
-				})
-		elseif rec.is_constructor then
-			rec:write_part("ffi_pre",
-				{'  ${this} = C.nobj_ffi_',wrap_obj.base_type,'_new()\n',
-				 '  local id = obj_ptr_to_id(${this})\n',
-				 '  local wrap = {}\n',
-				 '  nobj_callback_states[id] = wrap\n',
-				})
+				{'  nobj_callback_states[id] = nil\n'})
+			if wrap_obj.wrap_state then
+				rec:write_part("ffi_post", {
+					 '  C.nobj_ffi_',wrap_obj.base_type,'_free(${this})\n',
+					})
+			end
+		else
+			if wrap_obj.wrap_state and rec.is_constructor then
+				rec:write_part("ffi_pre",
+					{'  ${this} = C.nobj_ffi_',wrap_obj.base_type,'_new()\n'})
+			end
+			rec:write_part("ffi_pre", [[
+  local id = obj_ptr_to_id(${this})
+  local wrap = nobj_callback_states[id]
+  if not wrap then
+    wrap = {}
+    nobj_callback_states[id] = wrap
+  end
+]])
+			local state_var = rec.state_var
+			if state_var then
+				rec:write_part("ffi_pre",
+					{'  ${',state_var.name,'} = ${this}\n'})
+			end
 		end
 	end
 

@@ -844,6 +844,74 @@ static FUNC_UNUSED int lua_checktype_ref(lua_State *L, int _index, int _type) {
 	return luaL_ref(L, LUA_REGISTRYINDEX);
 }
 
+/* use static pointer as key to weak callback_state table. */
+static char obj_callback_state_weak_ref_key[] = "obj_callback_state_weak_ref_key";
+
+static FUNC_UNUSED void *nobj_get_callback_state(lua_State *L, int owner_idx, int size) {
+	void *cb_state;
+
+	lua_pushlightuserdata(L, obj_callback_state_weak_ref_key); /* key for weak table. */
+	lua_rawget(L, LUA_REGISTRYINDEX);  /* check if weak table exists already. */
+	if(lua_isnil(L, -1)) {
+		lua_pop(L, 1); /* pop nil. */
+		/* create weak table for callback_state */
+		lua_newtable(L);               /* weak table. */
+		lua_newtable(L);               /* metatable for weak table. */
+		lua_pushliteral(L, "__mode");
+		lua_pushliteral(L, "k");
+		lua_rawset(L, -3);             /* metatable.__mode = 'k'  weak keys. */
+		lua_setmetatable(L, -2);       /* add metatable to weak table. */
+		lua_pushlightuserdata(L, obj_callback_state_weak_ref_key); /* key for weak table. */
+		lua_pushvalue(L, -2);          /* dup weak table. */
+		lua_rawset(L, LUA_REGISTRYINDEX);  /* add weak table to registry. */
+	}
+
+	/* check weak table for callback_state. */
+	lua_pushvalue(L, owner_idx); /* dup. owner as lookup key. */
+	lua_rawget(L, -2);
+	if(lua_isnil(L, -1)) {
+		lua_pop(L, 1); /* pop nil. */
+		lua_pushvalue(L, owner_idx); /* dup. owner as lookup key. */
+		/* create new callback state. */
+		cb_state = lua_newuserdata(L, size);
+		lua_rawset(L, -3);
+		lua_pop(L, 1); /* pop <weak table> */
+	} else {
+		/* got existing callback state. */
+		cb_state = lua_touserdata(L, -1);
+		lua_pop(L, 2); /* pop <weak table>, <callback_state> */
+	}
+
+	return cb_state;
+}
+
+static FUNC_UNUSED void *nobj_delete_callback_state(lua_State *L, int owner_idx) {
+	void *cb_state = NULL;
+
+	lua_pushlightuserdata(L, obj_callback_state_weak_ref_key); /* key for weak table. */
+	lua_rawget(L, LUA_REGISTRYINDEX);  /* check if weak table exists already. */
+	if(lua_isnil(L, -1)) {
+		lua_pop(L, 1); /* pop nil.  no weak table, so there is no callback state. */
+		return NULL;
+	}
+	/* get callback state. */
+	lua_pushvalue(L, owner_idx); /* dup. owner */
+	lua_rawget(L, -2);
+	if(lua_isnil(L, -1)) {
+		lua_pop(L, 2); /* pop <weak table>, nil.  No callback state for the owner. */
+	} else {
+		cb_state = lua_touserdata(L, -1);
+		lua_pop(L, 1); /* pop <state> */
+		/* remove callback state. */
+		lua_pushvalue(L, owner_idx); /* dup. owner */
+		lua_pushnil(L);
+		lua_rawset(L, -3);
+		lua_pop(L, 1); /* pop <weak table> */
+	}
+
+	return cb_state;
+}
+
 ]]
 
 local interfaceHelperFunc = [[
@@ -1687,8 +1755,12 @@ callback_state = function(self, rec, parent)
 	-- start callback object.
 	rec:write_part("wrapper_obj",
 	{'/* callback object: ', rec.name, ' */\n',
-		'typedef struct {\n',
-		'  ', rec.base_type, ' base;\n',
+		'typedef struct {\n'})
+	if rec.wrap_state then
+		rec:write_part("wrapper_obj", {
+			'  ', rec.base_type, ' base;\n'})
+	end
+	rec:write_part("wrapper_obj", {
 		'  lua_State *L;\n',
 	})
 end,
@@ -1946,8 +2018,8 @@ c_function = function(self, rec, parent)
 	{'/* method: ', name, ' */\n', rec.c_if_defs,
 		'static int ', rec.c_name, '(lua_State *L) {\n'})
 	-- is this a wrapper function
-	if rec.wrapper_obj then
-		local wrap_type = rec.wrapper_obj.wrap_type
+	if rec.callback_state then
+		local wrap_type = rec.callback_state.wrap_type
 		rec:write_part("pre",
 			{ '  ', wrap_type,' *wrap;\n',
 			})
@@ -1955,26 +2027,50 @@ c_function = function(self, rec, parent)
 end,
 c_function_end = function(self, rec, parent)
 	-- is this a wrapper function
-	if rec.wrapper_obj then
-		local wrap_obj = rec.wrapper_obj
+	if rec.callback_state then
+		local wrap_obj = rec.callback_state
 		local wrap_type = wrap_obj.wrap_type
-		local callbacks = wrap_obj.callbacks
 		if rec.is_destructor then
-			rec:write_part("pre_src",
-				{'  wrap = (',wrap_type,' *)${this};\n'})
+			if wrap_obj.wrap_state then
+				rec:write_part("pre_src",
+					{'  wrap = (',wrap_type,' *)${this};\n'})
+			else
+				rec:write_part("pre_src", {
+					'  wrap = nobj_delete_callback_state(L, ${this::idx});\n',
+				})
+			end
+			local callbacks = wrap_obj.callbacks
 			for name,cb in pairs(callbacks) do
-				rec:write_part("src",
+				rec:write_part("pre_src",
 					{'  luaL_unref(L, LUA_REGISTRYINDEX, wrap->', name,');\n'})
 			end
-			rec:write_part("post",
-				{'  obj_type_free(', wrap_type, ', wrap);\n'})
-		elseif rec.is_constructor then
-			rec:write_part("pre",
-				{
-				'  obj_type_new(', wrap_type, ', wrap);\n',
-				'  ${this} = &(wrap->base);\n',
-				'  wrap->L = L;\n',
+			if wrap_obj.wrap_state then
+				rec:write_part("post",
+					{'  obj_type_free(', wrap_type, ', wrap);\n'})
+			end
+		else
+			if wrap_obj.wrap_state then
+				if rec.is_constructor then
+					rec:write_part("pre", {
+						'  obj_type_new(', wrap_type, ', wrap);\n',
+					})
+				end
+				rec:write_part("pre",
+					'  ${this} = &(wrap->base);\n'
+				)
+			else
+				rec:write_part("pre", {
+					'  wrap = nobj_get_callback_state(L, ${', rec.state_owner,'::idx}, sizeof(',wrap_type,'));\n',
 				})
+			end
+			rec:write_part("pre", {
+				'  wrap->L = L;\n',
+			})
+		end
+		local state_var = rec.state_var
+		if state_var then
+			rec:write_part("pre",
+				{'  ${',state_var.name,'} = wrap;\n'})
 		end
 	end
 	-- apply variable name replacing in generated code.

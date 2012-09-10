@@ -48,7 +48,21 @@ local function callback(idx)
 end
 local test = bench.TestObj(callback)
 
-run_bench('C callback', N, function()
+run_bench('wrapped state C callback', N, function()
+	test:run(N)
+end)
+
+--
+-- Run benchmarks of no wrap state C callbacks.
+--
+
+local function callback(idx)
+	return 0
+end
+local test = bench.NoWrapTestObj()
+test:register(callback)
+
+run_bench('no wrap state C callback', N, function()
 	test:run(N)
 end)
 

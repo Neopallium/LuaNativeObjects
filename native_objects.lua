@@ -662,6 +662,12 @@ function var_in(rec)
 	return rec
 end
 
+function tmp_var(rec)
+	rec = var_out(rec)
+	rec.is_temp = true
+	return rec
+end
+
 -- A reference to another var_in/var_out variable.
 -- This is used by `c_call` records.
 function var_ref(var)
@@ -788,6 +794,10 @@ function callback(c_type)
 		rec.ref_field = rec.name
 		-- other variable that will be wrapped to hold callback state information.
 		rec.state_var = tremove(rec, 1)
+		if rec.state_var == 'this' then
+			rec.wrap_state = true
+			rec.owner = 'this'
+		end
 		return rec
 	end
 	return function (name)
@@ -797,7 +807,7 @@ end
 end
 end
 
-function callback_state(base_type)
+function callback_state(base_type, wrap_state)
 	-- cleanup base_type
 	base_type = base_type:gsub("[ *]","")
 	-- create name for new state type
@@ -808,6 +818,7 @@ function callback_state(base_type)
 	rec.wrap_type = name
 	-- base_type we are wrapping.
 	rec.base_type = base_type
+	rec.wrap_state = wrap_state
 	-- c_type we are wrapping. (pointer to base_type)
 	rec.c_type = name .. " *"
 	-- resolve base_type

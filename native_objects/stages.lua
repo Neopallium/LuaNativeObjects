@@ -140,14 +140,20 @@ var_in = function(self, rec, parent)
 	local container = parent._parent
 	-- create callback_state instance.
 	local cb_state
-	if rec.state_var == 'this' then
+	if rec.owner == 'this' then
 		local wrap_type = container.c_type
-		cb_state = callback_state(wrap_type)
+		cb_state = callback_state(wrap_type, rec.wrap_state)
 		-- wrap 'this' object.
-		container.is_wrapped = true
-		container.wrapper_obj = cb_state
+		container.callback_state = cb_state
+		parent.callback_state = cb_state
+		parent.state_owner = rec.owner
+		if rec.state_var ~= 'this' then
+			local state_var = tmp_var{ "void *", rec.state_var }
+			parent.state_var = state_var
+			parent:insert_record(state_var, 1)
+		end
 	else
-		assert("un-supported callback state var: " .. rec.state_var)
+		assert("un-supported callback owner type: " .. rec.owner)
 	end
 	container:insert_record(cb_state, 1)
 	-- create callback_func instance.
@@ -349,10 +355,9 @@ c_function = function(self, rec, parent)
 	-- add function to parent's function list.
 	parent.functions[rec.name] = rec
 	-- prepare wrapped new/delete methods
-	if rec._is_method and parent.is_wrapped then
-		if rec.is_destructor or rec.is_constructor then
-			rec.is_wrapper = true
-			rec.wrapper_obj = parent.wrapper_obj
+	if rec._is_method and parent.callback_state then
+		if rec.is_destructor then
+			rec.callback_state = parent.callback_state
 		end
 	end
 	-- map names to in/out variables
@@ -532,7 +537,7 @@ c_call = function(self, rec, parent)
 			-- add param as a variable.
 			parent:add_variable(param)
 		else
-			-- variable exists, return this input variable into a reference.
+			-- variable exists, turn this input variable into a reference.
 			local ref = var_ref(param)
 			-- invalidate old `var_in` record
 			param._rec_type = nil
