@@ -2037,6 +2037,7 @@ c_function_end = function(self, rec, parent)
 			else
 				rec:write_part("pre_src", {
 					'  wrap = nobj_delete_callback_state(L, ${this::idx});\n',
+					'  if(wrap) {\n',
 				})
 			end
 			local callbacks = wrap_obj.callbacks
@@ -2047,6 +2048,10 @@ c_function_end = function(self, rec, parent)
 			if wrap_obj.wrap_state then
 				rec:write_part("post",
 					{'  obj_type_free(', wrap_type, ', wrap);\n'})
+			else
+				rec:write_part("pre_src", {
+					'  }\n',
+				})
 			end
 		else
 			if wrap_obj.wrap_state then
