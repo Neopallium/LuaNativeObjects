@@ -82,6 +82,7 @@ local function real_c_type_resolver(self)
 	end
 	if _type == nil then
 		print("Unkown type: " .. c_type)
+		return _type
 	end
 	rawset(self, "_type", _type)
 	_type._in_use = true
