@@ -1361,9 +1361,9 @@ callback_func_end = function(self, rec, parent)
 	rec:write_part("ffi_pre_src", {
 	'  local status, ret = pcall(wrap.' .. rec.ref_field,', ', cb_params,')\n',
 	'  if not status then\n',
+	'    print("CALLBACK Error:", ret)\n',
 	})
 	rec:write_part("ffi_post_src", {
-	'    print("CALLBACK Error:", ret)\n',
 	'    return ', func_rc ,'\n',
 	'  end\n',
 	})
