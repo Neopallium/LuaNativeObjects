@@ -641,7 +641,7 @@ function var_out(rec)
 	rec.c_type = tremove(rec, 1)
 	-- out variable's name
 	rec.name = tremove(rec, 1)
-	if rec.need_buffer then
+	if rec.need_buffer and rec.has_length == nil then
 		rec.has_length = true
 	end
 	-- parse tags from name.
