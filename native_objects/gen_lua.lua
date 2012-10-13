@@ -1518,11 +1518,15 @@ c_module_end = function(self, rec, parent)
 end,
 error_code = function(self, rec, parent)
 	rec:add_var('object_name', rec.name)
-	local func_def = 'static void ' .. rec.func_name ..
-		'(lua_State *L, ${object_name} err)'
-	-- add push error function decl.
+	-- error typedef
 	rec:write_part('funcdefs', {
 		'typedef ', rec.c_type, ' ${object_name};\n\n',
+	})
+	if rec.no_error_string then return end
+	-- add push error function decl.
+	local func_def = 'static void ' .. rec.func_name ..
+		'(lua_State *L, ${object_name} err)'
+	rec:write_part('funcdefs', {
 		func_def, ';\n'
 	})
 	-- start push error function.
@@ -1546,8 +1550,10 @@ error_code_end = function(self, rec, parent)
 	local parts = { "funcdefs", "src" }
 	rec:vars_parts(parts)
 	parent:copy_parts(rec, { "funcdefs" })
-	-- append custom error push function.
-	parent:write_part("methods", rec:dump_parts{ "src" })
+	if not rec.no_error_string then
+		-- append custom error push function.
+		parent:write_part("methods", rec:dump_parts{ "src" })
+	end
 
 end,
 interface_end = function(self, rec, parent)
@@ -2219,9 +2225,21 @@ var_out = function(self, rec, parent)
 	local error_code = parent._has_error_code
 	if error_code == rec then
 		local err_type = error_code.c_type_rec
-		-- if error_code is the first var_out, then push 'true' to signal no error.
-		-- On error push 'false' and the error message.
-		if rec._rec_idx == 1 then
+		if err_type.no_error_string then
+			push_count = 0
+			if rec._rec_idx == 1 then
+				parent:write_part("post", {
+				'  /* check for error. */\n',
+				'  if(',err_type.is_error_check(error_code),') {\n',
+				'    lua_pushnil(L);\n',
+				'  } else {\n',
+				'    lua_pushboolean(L, 1);\n',
+				'  }\n',
+				})
+			end
+		elseif rec._rec_idx == 1 then
+			-- if error_code is the first var_out, then push 'true' to signal no error.
+			-- On error push nil and the error message.
 			push_count = 2
 			parent:write_part("post", {
 			'  /* check for error. */\n',

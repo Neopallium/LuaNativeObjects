@@ -1044,6 +1044,7 @@ error_code = function(self, rec, parent)
 	rec:write_part("ffi_typedef", {
 		'typedef ', rec.c_type, ' ', rec.name, ';\n\n',
 	})
+	if rec.no_error_string then return end
 	-- add variable for error string
 	rec:write_part("ffi_src", {
 		'local function ',rec.func_name,'(err)\n',
@@ -1063,6 +1064,10 @@ end
 
 	-- copy generated FFI bindings to parent
 	local ffi_parts = { "ffi_pre_cdef", "ffi_typedef", "ffi_cdef", "ffi_src" }
+	if rec.no_error_string then
+		-- remove ffi_src
+		ffi_parts[#ffi_parts] = nil
+	end
 	rec:vars_parts(ffi_parts)
 	parent:copy_parts(rec, ffi_parts)
 end,
@@ -1649,9 +1654,18 @@ var_out = function(self, rec, parent)
 	local error_code = parent._has_error_code
 	if error_code == rec then
 		local err_type = error_code.c_type_rec
-		-- if error_code is the first var_out, then push 'true' to signal no error.
-		-- On error push 'false' and the error message.
-		if rec._rec_idx == 1 then
+		if err_type.no_error_string then
+			if rec._rec_idx == 1 then
+				parent:write_part("ffi_post", {
+				'  -- check for error.\n',
+				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
+				'    return nil\n',
+				'  end\n',
+				})
+			end
+		elseif rec._rec_idx == 1 then
+			-- if error_code is the first var_out, then push 'true' to signal no error.
+			-- On error push 'false' and the error message.
 			if err_type.ffi_is_error_check then
 				parent:write_part("ffi_post", {
 				'  -- check for error.\n',
@@ -1666,11 +1680,19 @@ var_out = function(self, rec, parent)
 		local err_type = error_code.c_type_rec
 		-- return nil for this out variable, if there was an error.
 		if err_type.ffi_is_error_check then
-			parent:write_part("ffi_post", {
-			'  if ',err_type.ffi_is_error_check(error_code),' then\n',
-			'    return nil,', err_type:_ffi_push(error_code), '\n',
-			'  end\n',
-			})
+			if err_type.no_error_string then
+				parent:write_part("ffi_post", {
+				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
+				'    return nil\n',
+				'  end\n',
+				})
+			else
+				parent:write_part("ffi_post", {
+				'  if ',err_type.ffi_is_error_check(error_code),' then\n',
+				'    return nil,', err_type:_ffi_push(error_code), '\n',
+				'  end\n',
+				})
+			end
 		end
 		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags, ffi_unwrap), ", " })
 	elseif rec.is_error_on_null then
