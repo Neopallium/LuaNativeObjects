@@ -182,6 +182,10 @@ object = function(self, rec, parent)
 	rec._obj_id = self._obj_cnt
 	self._obj_cnt = self._obj_cnt + 1
 end,
+import_object = function(self, rec, parent)
+	rec._obj_id = self._obj_cnt
+	self._obj_cnt = self._obj_cnt + 1
+end,
 extends = function(self, rec, parent)
 	-- find base-object record.
 	local base = resolve_c_type(rec.name)

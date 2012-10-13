@@ -249,6 +249,28 @@ function object(name)
 end
 end
 
+function import_object(mod)
+	return function (name)
+	return function (rec)
+	rec = rec or {}
+	local userdata_type = rec.userdata_type or 'generic'
+	rec.userdata_type = userdata_type
+	if userdata_type == 'generic' or userdata_type == 'embed' or userdata_type == 'simple ptr' then
+		ctype(name .. " *", rec,"import_object")
+		rec.is_ptr = true
+		rec.name = name
+		-- map the c_type to this record
+		new_c_type(name, rec)
+	else
+		ctype(name, rec, "import_object")
+	end
+	-- external module name.
+	rec.mod_name = mod
+	return rec
+end
+end
+end
+
 function interface(name)
 	return function (rec)
 	local rec = ctype(name, rec,"interface")

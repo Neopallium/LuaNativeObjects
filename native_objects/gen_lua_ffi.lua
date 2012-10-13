@@ -375,15 +375,19 @@ do
 	end
 
 	-- type checking function for C API.
-	_priv[obj_type] = function(obj)
+	local function c_check(obj)
 		if ffi.istype(obj_ctype, obj) then return obj._wrapped_val end
 		return nil
 	end
+	_priv[obj_type] = c_check
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr)
 		return obj_type_${object_name}_push(ffi.cast("${object_name} *", ptr)[0])
 	end
 
+	-- export check functions for use in other modules.
+	obj_mt.c_check = c_check
+	obj_mt.ffi_check = obj_type_${object_name}_check
 end
 
 ]],
@@ -427,15 +431,19 @@ do
 	end
 
 	-- type checking function for C API.
-	_priv[obj_type] = function(ptr)
+	local function c_check(ptr)
 		if ffi.istype(obj_ctype, ptr) then return ptr end
 		return nil
 	end
+	_priv[obj_type] = c_check
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr)
 		return obj_type_${object_name}_push(ffi.cast(obj_ctype, ptr)[0])
 	end
 
+	-- export check functions for use in other modules.
+	obj_mt.c_check = c_check
+	obj_mt.ffi_check = obj_type_${object_name}_check
 end
 
 ]],
@@ -471,10 +479,11 @@ do
 	end
 
 	-- type checking function for C API.
-	_priv[obj_type] = function(obj)
+	local function c_check(obj)
 		if ffi.istype(obj_type, obj) then return obj end
 		return nil
 	end
+	_priv[obj_type] = c_check
 	-- push function for C API.
 	reg_table[obj_type] = function(ptr)
 		local obj = obj_ctype()
@@ -482,6 +491,9 @@ do
 		return obj
 	end
 
+	-- export check functions for use in other modules.
+	obj_mt.c_check = c_check
+	obj_mt.ffi_check = obj_type_${object_name}_check
 end
 
 ]],
@@ -546,6 +558,9 @@ do
 		return obj_type_${object_name}_push(ffi.cast('uintptr_t',ptr), flags)
 	end
 
+	-- export check functions for use in other modules.
+	obj_mt.c_check = obj_type_${object_name}_check
+	obj_mt.ffi_check = obj_type_${object_name}_check
 end
 
 ]],
@@ -599,6 +614,9 @@ ${dyn_caster}
 		return obj_type_${object_name}_push(ffi.cast(obj_ctype,ptr), flags)
 	end
 
+	-- export check functions for use in other modules.
+	obj_mt.c_check = obj_type_${object_name}_check
+	obj_mt.ffi_check = obj_type_${object_name}_check
 end
 
 ]],
@@ -655,6 +673,9 @@ ${dyn_caster}
 		return obj_type_${object_name}_push(ffi.cast(obj_ctype,ptr), flags)
 	end
 
+	-- export check functions for use in other modules.
+	obj_mt.c_check = obj_type_${object_name}_check
+	obj_mt.ffi_check = obj_type_${object_name}_check
 end
 
 ]],
@@ -1202,6 +1223,30 @@ object_end = function(self, rec, parent)
 		parent:copy_parts(rec, ffi_parts)
 	end
 
+end,
+import_object_end = function(self, rec, parent)
+	rec:add_var('object_name', rec.name)
+	-- create FFI check functions
+	rec:write_part("ffi_obj_type", [[
+local function obj_type_${object_name}_check(obj)
+	-- try to import FFI check function from external module.
+	local mt = reg_table['${object_name}']
+	if mt then
+		local ffi_check = mt.ffi_check
+		if ffi_check then
+			obj_type_${object_name}_check = ffi_check
+			return ffi_check(obj)
+		end
+	end
+	return error("Expected '${object_name}'", 2)
+end
+
+]])
+
+	-- copy parts to parent
+	local ffi_parts = { "ffi_obj_type" }
+	rec:vars_parts(ffi_parts)
+	parent:copy_parts(rec, ffi_parts)
 end,
 callback_state = function(self, rec, parent)
 	rec:add_var('wrap_type', rec.wrap_type)

@@ -196,6 +196,46 @@ reg_stage_parser("lang_type_process", {
 		end
 		rec._ffi_push_error = rec._ffi_push
 	end,
+	import_object = function(self, rec, parent)
+		rec.lang_type = 'userdata'
+		local type_name = 'obj_type_' .. rec.name
+		rec._obj_type_name = type_name
+
+		-- create _check/_delete/_push functions
+		rec._define = function(self, var)
+			return var.c_type .. ' ${'..var.name..'};\n'
+		end
+		rec._check = function(self, var)
+			return '${'..var.name..'} = '..type_name..'_check(L,${'..var.name..'::idx});\n'
+		end
+		rec._opt = function(self, var)
+			return '${'..var.name..'} = '..type_name..'_optional(L,${'..var.name..'::idx});\n'
+		end
+		rec._delete = function(self, var, flags)
+			error("Can't delete an imported type.")
+		end
+		rec._to = rec._check
+		rec._push = function(self, var, flags)
+			error("Can't push an imported type.")
+		end
+		rec._ffi_define = function(self, var)
+			return ''
+		end
+		rec._ffi_check = function(self, var)
+			local name = '${' .. var.name .. '}'
+			return name .. ' = '..type_name..'_check('..name..')\n'
+		end
+		rec._ffi_opt = function(self, var)
+			local name = '${' .. var.name .. '}'
+			return name .. ' = '..name..' and '..type_name..'_check('..name..') or nil\n'
+		end
+		rec._ffi_delete = function(self, var, has_flags)
+			error("Can't delete an imported type.")
+		end
+		rec._ffi_push = function(self, var, flags, unwrap)
+			error("Can't push an imported type.")
+		end
+	end,
 	object = function(self, rec, parent)
 		rec.lang_type = 'userdata'
 		local type_name = 'obj_type_' .. rec.name
