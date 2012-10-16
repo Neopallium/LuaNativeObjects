@@ -127,7 +127,7 @@ static int nobj_try_loading_ffi(lua_State *L, const char *ffi_mod_name,
 		lua_settable(L, priv_table);
 		ffi_exports++;
 	}
-	err = lua_load(L, nobj_lua_Reader, &state, ffi_mod_name);
+	err = lua_load_no_mode(L, nobj_lua_Reader, &state, ffi_mod_name);
 	if(0 == err) {
 		lua_pushvalue(L, -2); /* dup C module's table. */
 		lua_pushvalue(L, priv_table); /* move priv_table to top of stack. */

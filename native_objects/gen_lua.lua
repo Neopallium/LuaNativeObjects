@@ -26,16 +26,6 @@ require("native_objects.gen_lua_ffi")
 --
 -- templates
 --
-local generated_output_header = [[
-/***********************************************************************************************
-************************************************************************************************
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!!!!!! Warning this file was generated from a set of *.nobj.lua definition files !!!!!!!!!!!!!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-************************************************************************************************
-***********************************************************************************************/
-
-]]
 
 local obj_udata_types = [[
 
@@ -207,9 +197,9 @@ typedef struct reg_impl {
 typedef struct reg_sub_module {
 	obj_type        *type;
 	module_reg_type req_type;
-	const luaL_reg  *pub_funcs;
-	const luaL_reg  *methods;
-	const luaL_reg  *metas;
+	const luaL_Reg  *pub_funcs;
+	const luaL_Reg  *methods;
+	const luaL_Reg  *metas;
 	const obj_base  *bases;
 	const obj_field *fields;
 	const obj_const *constants;
@@ -239,6 +229,12 @@ local objHelperFunc = [[
 #endif
 
 #ifndef REG_MODULES_AS_GLOBALS
+#define REG_MODULES_AS_GLOBALS 0
+#endif
+
+/* For Lua 5.2 don't register modules as globals. */
+#if LUA_VERSION_NUM == 502
+#undef REG_MODULES_AS_GLOBALS
 #define REG_MODULES_AS_GLOBALS 0
 #endif
 
@@ -302,7 +298,7 @@ static FUNC_UNUSED obj_udata *obj_udata_toobj(lua_State *L, int _index) {
 		luaL_typerror(L, _index, "userdata"); /* is not a userdata value. */
 	}
 	/* verify userdata size. */
-	len = lua_objlen(L, _index);
+	len = lua_rawlen(L, _index);
 	if(len != sizeof(obj_udata)) {
 		/* This shouldn't be possible */
 		luaL_error(L, "invalid userdata size: size=%d, expected=%d", len, sizeof(obj_udata));
@@ -718,9 +714,9 @@ static FUNC_UNUSED void *obj_simple_udata_luapush(lua_State *L, void *obj, int s
 /* default simple object equal method. */
 static FUNC_UNUSED int obj_simple_udata_default_equal(lua_State *L) {
 	void *ud1 = obj_simple_udata_toobj(L, 1);
-	size_t len1 = lua_objlen(L, 1);
+	size_t len1 = lua_rawlen(L, 1);
 	void *ud2 = obj_simple_udata_toobj(L, 2);
-	size_t len2 = lua_objlen(L, 2);
+	size_t len2 = lua_rawlen(L, 2);
 
 	if(len1 == len2) {
 		lua_pushboolean(L, (memcmp(ud1, ud2, len1) == 0));
@@ -799,12 +795,12 @@ static void obj_type_register_constants(lua_State *L, const obj_const *constants
 }
 
 static void obj_type_register_package(lua_State *L, const reg_sub_module *type_reg) {
-	const luaL_reg *reg_list = type_reg->pub_funcs;
+	const luaL_Reg *reg_list = type_reg->pub_funcs;
 
 	/* create public functions table. */
 	if(reg_list != NULL && reg_list[0].name != NULL) {
 		/* register functions */
-		luaL_register(L, NULL, reg_list);
+		luaL_setfuncs(L, reg_list, 0);
 	}
 
 	obj_type_register_constants(L, type_reg->constants, -1, type_reg->bidirectional_consts);
@@ -813,23 +809,23 @@ static void obj_type_register_package(lua_State *L, const reg_sub_module *type_r
 }
 
 static void obj_type_register_meta(lua_State *L, const reg_sub_module *type_reg) {
-	const luaL_reg *reg_list;
+	const luaL_Reg *reg_list;
 
 	/* create public functions table. */
 	reg_list = type_reg->pub_funcs;
 	if(reg_list != NULL && reg_list[0].name != NULL) {
 		/* register functions */
-		luaL_register(L, NULL, reg_list);
+		luaL_setfuncs(L, reg_list, 0);
 	}
 
 	obj_type_register_constants(L, type_reg->constants, -1, type_reg->bidirectional_consts);
 
 	/* register methods. */
-	luaL_register(L, NULL, type_reg->methods);
+	luaL_setfuncs(L, type_reg->methods, 0);
 
 	/* create metatable table. */
 	lua_newtable(L);
-	luaL_register(L, NULL, type_reg->metas); /* fill metatable */
+	luaL_setfuncs(L, type_reg->metas, 0); /* fill metatable */
 	/* setmetatable on meta-object. */
 	lua_setmetatable(L, -2);
 
@@ -837,7 +833,7 @@ static void obj_type_register_meta(lua_State *L, const reg_sub_module *type_reg)
 }
 
 static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int priv_table) {
-	const luaL_reg *reg_list;
+	const luaL_Reg *reg_list;
 	obj_type *type = type_reg->type;
 	const obj_base *base = type_reg->bases;
 
@@ -854,7 +850,7 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 	reg_list = type_reg->pub_funcs;
 	if(reg_list != NULL && reg_list[0].name != NULL) {
 		/* register "constructors" as to object's public API */
-		luaL_register(L, NULL, reg_list); /* fill public API table. */
+		luaL_setfuncs(L, reg_list, 0); /* fill public API table. */
 
 		/* make public API table callable as the default constructor. */
 		lua_newtable(L); /* create metatable */
@@ -884,7 +880,7 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 #endif
 	}
 
-	luaL_register(L, NULL, type_reg->methods); /* fill methods table. */
+	luaL_setfuncs(L, type_reg->methods, 0); /* fill methods table. */
 
 	luaL_newmetatable(L, type->name); /* create metatable */
 	lua_pushliteral(L, ".name");
@@ -902,7 +898,7 @@ static void obj_type_register(lua_State *L, const reg_sub_module *type_reg, int 
 	lua_pushvalue(L, -2); /* dup metatable. */
 	lua_rawset(L, priv_table);    /* priv_table["<object_name>"] = metatable */
 
-	luaL_register(L, NULL, type_reg->metas); /* fill metatable */
+	luaL_setfuncs(L, type_reg->metas, 0); /* fill metatable */
 
 	/* add obj_bases to metatable. */
 	while(base->id >= 0) {
@@ -1337,7 +1333,7 @@ LUA_NOBJ_API int luaopen_${module_c_name}(lua_State *L) {
 	luaL_register(L, "${module_name}", ${module_c_name}_function);
 #else
 	lua_newtable(L);
-	luaL_register(L, NULL, ${module_c_name}_function);
+	luaL_setfuncs(L, ${module_c_name}_function, 0);
 #endif
 
 	/* register module constants. */
@@ -1385,7 +1381,7 @@ LUA_NOBJ_API int luaopen_${module_c_name}_${object_name}(lua_State *L) {
 	luaL_register(L, "${module_name}.${object_name}", &(null_reg_list));
 #else
 	lua_newtable(L);
-	luaL_register(L, NULL, &(null_reg_list));
+	luaL_setfuncs(L, &(null_reg_list), 0);
 #endif
 
 	/* register submodule. */
@@ -1584,7 +1580,7 @@ c_module = function(self, rec, parent)
 	rec.functions_regs = 'function_regs'
 	rec.methods_regs = 'function_regs'
 	rec:write_part(rec.methods_regs,
-		{'static const luaL_reg ${module_c_name}_function[] = {\n'})
+		{'static const luaL_Reg ${module_c_name}_function[] = {\n'})
 end,
 c_module_end = function(self, rec, parent)
 	-- end obj_type array
@@ -1693,10 +1689,10 @@ interface_end = function(self, rec, parent)
 end,
 object = function(self, rec, parent)
 	rec:add_var('object_name', rec.name)
-	-- make luaL_reg arrays for this object
+	-- make luaL_Reg arrays for this object
 	if not rec.is_package then
 		rec:write_part("metas_regs",
-			{'static const luaL_reg obj_${object_name}_metas[] = {\n'})
+			{'static const luaL_Reg obj_${object_name}_metas[] = {\n'})
 		rec:write_part("base_regs",
 			{'static const obj_base obj_${object_name}_bases[] = {\n'})
 		rec:write_part("field_regs",
@@ -1704,14 +1700,14 @@ object = function(self, rec, parent)
 		-- where we want the module function registered.
 		rec.methods_regs = 'methods_regs'
 		rec:write_part(rec.methods_regs,
-			{'static const luaL_reg obj_${object_name}_methods[] = {\n'})
+			{'static const luaL_Reg obj_${object_name}_methods[] = {\n'})
 	elseif rec.is_meta then
 		rec:write_part("metas_regs",
-			{'static const luaL_reg obj_${object_name}_metas[] = {\n'})
+			{'static const luaL_Reg obj_${object_name}_metas[] = {\n'})
 		-- where we want the module function registered.
 		rec.methods_regs = 'methods_regs'
 		rec:write_part(rec.methods_regs,
-			{'static const luaL_reg obj_${object_name}_methods[] = {\n'})
+			{'static const luaL_Reg obj_${object_name}_methods[] = {\n'})
 	end
 	rec:write_part("const_regs",
 		{'static const obj_const obj_${object_name}_constants[] = {\n'})
@@ -1719,7 +1715,7 @@ object = function(self, rec, parent)
 		{'static const reg_impl obj_${object_name}_implements[] = {\n'})
 	rec.functions_regs = 'pub_funcs_regs'
 	rec:write_part("pub_funcs_regs",
-		{'static const luaL_reg obj_${object_name}_pub_funcs[] = {\n'})
+		{'static const luaL_Reg obj_${object_name}_pub_funcs[] = {\n'})
 end,
 object_end = function(self, rec, parent)
 	-- check for dyn_caster
@@ -1767,7 +1763,7 @@ object_end = function(self, rec, parent)
 			rec:write_part('metas_regs',
 				{'  {"__eq", ',obj_type_equal_tostring[ud_type],'_equal},\n'})
 		end
-		-- finish luaL_reg arrays for this object
+		-- finish luaL_Reg arrays for this object
 		rec:write_part("methods_regs", {
 		'  {NULL, NULL}\n',
 		'};\n\n'
@@ -1789,7 +1785,7 @@ object_end = function(self, rec, parent)
 		'};\n\n'
 		})
 	elseif rec.is_meta then
-		-- finish luaL_reg arrays for this object
+		-- finish luaL_Reg arrays for this object
 		rec:write_part("methods_regs", {
 		'  {NULL, NULL}\n',
 		'};\n\n'
@@ -2449,14 +2445,67 @@ local function src_write(...)
 	src_file:write(...)
 end
 
--- write header
-src_write(generated_output_header)
-
--- write includes
+-- write header & includes
 src_write[[
+/***********************************************************************************************
+************************************************************************************************
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!! Warning this file was generated from a set of *.nobj.lua definition files !!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+************************************************************************************************
+***********************************************************************************************/
+
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+/* some Lua 5.0 compatibility support. */
+#if !defined(lua_pushliteral)
+#define lua_pushliteral(L, s) lua_pushstring(L, "" s, (sizeof(s)/sizeof(char))-1)
+#endif
+
+#if !defined(LUA_VERSION_NUM)
+#define lua_pushinteger(L, n) lua_pushnumber(L, (lua_Number)n)
+#define luaL_Reg luaL_reg
+#endif
+
+/* some Lua 5.1 compatibility support. */
+#if !defined(LUA_VERSION_NUM) || (LUA_VERSION_NUM == 501)
+/*
+** Adapted from Lua 5.2.0
+*/
+static void luaL_setfuncs (lua_State *L, const luaL_Reg *l, int nup) {
+  luaL_checkstack(L, nup, "too many upvalues");
+  for (; l->name != NULL; l++) {  /* fill the table with given functions */
+    int i;
+    for (i = 0; i < nup; i++)  /* copy upvalues to the top */
+      lua_pushvalue(L, -nup);
+    lua_pushstring(L, l->name);
+    lua_pushcclosure(L, l->func, nup);  /* closure with those upvalues */
+    lua_settable(L, -(nup + 3));
+  }
+  lua_pop(L, nup);  /* remove upvalues */
+}
+
+#define lua_load_no_mode(L, reader, data, source) \
+	lua_load(L, reader, data, source)
+
+#define lua_rawlen(L, idx) lua_objlen(L, idx)
+
+#endif
+
+#if LUA_VERSION_NUM == 502
+
+#define lua_load_no_mode(L, reader, data, source) \
+	lua_load(L, reader, data, source, NULL)
+
+static int luaL_typerror (lua_State *L, int narg, const char *tname) {
+  const char *msg = lua_pushfstring(L, "%s expected, got %s",
+                                    tname, luaL_typename(L, narg));
+  return luaL_argerror(L, narg, msg);
+}
+
+#endif
 
 ]]
 
