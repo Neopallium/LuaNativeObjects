@@ -239,7 +239,23 @@ implement_method = function(self, rec, parent)
 			"-- ${interface_name} interface method ", rec.name, "\n",
 			"function impl_meths.", rec.name, "(${this}", if_method.param_names, ")\n",
 		})
-		if rec.get_field then
+		if rec.constant then
+			-- generate code to return ${this}
+			rec:write_part("src", {
+				"  return ", rec.constant,";\n",
+			})
+			rec:write_part("ffi_src", {
+				"  return ", rec.constant,"\n",
+			})
+		elseif rec.return_this then
+			-- generate code to return ${this}
+			rec:write_part("src", {
+				"  return ${this};\n",
+			})
+			rec:write_part("ffi_src", {
+				"  return ${this}\n",
+			})
+		elseif rec.get_field then
 			-- generate code to return a field from ${this}
 			rec:write_part("src", {
 				"  return ${this}->", rec.get_field, ";\n",
