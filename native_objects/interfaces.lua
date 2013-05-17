@@ -29,16 +29,12 @@ interface "MutableBuffer" {
 	interface_method "size_t" "get_size" {},
 }
 
---[[
--- object type for "FILE *"
-interface "File" {
-}
-
--- object type for int/HANDLE/SOCKET file descriptors
+-- object type for file descriptors
 interface "FD" {
 	interface_method "int" "get_fd" {},
+	-- 0 = file, 1 = socket, -1 = other/unknown
+	interface_method "int" "get_type" {},
 }
---]]
 
 
 --
