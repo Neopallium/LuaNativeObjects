@@ -151,6 +151,7 @@ implements = function(self, rec, parent)
 	local interface = rec.interface_rec
 	rec:add_var("interface_name", rec.name)
 	rec.c_type = parent.c_type
+	rec.is_ptr = parent.is_ptr
 	rec.if_methods = interface.methods
 	rec.methods = {}
 
@@ -223,8 +224,16 @@ implement_method = function(self, rec, parent)
 		" * ${interface_name} interface method ", rec.name, "\n",
 		" */\n",
 		"static ", if_method.func_decl, " {\n",
-		"  ", parent.c_type, " ${this} = this_v;\n",
 	})
+	if parent.is_ptr then
+		rec:write_part("src", {
+			"  ", parent.c_type, " ${this} = this_v;\n",
+		})
+	else
+		rec:write_part("src", {
+			"  ", parent.c_type, " ${this} = *((", parent.c_type ," *)this_v);\n",
+		})
+	end
 	if not rec.c_function then
 		rec:write_part("ffi_src", {
 			"-- ${interface_name} interface method ", rec.name, "\n",
