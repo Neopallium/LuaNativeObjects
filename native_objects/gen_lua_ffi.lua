@@ -472,14 +472,14 @@ do
 	end
 
 	function obj_mt.__eq(val1, val2)
-		if not ffi.istype(obj_type, val2) then return false end
-		assert(ffi.istype(obj_type, val1), "expected ${object_name}")
+		if not ffi.istype(obj_ctype, val2) then return false end
+		assert(ffi.istype(obj_ctype, val1), "expected ${object_name}")
 		return (C.memcmp(val1, val2, ${object_name}_sizeof) == 0)
 	end
 
 	-- type checking function for C API.
 	local function c_check(obj)
-		if ffi.istype(obj_type, obj) then return obj end
+		if ffi.istype(obj_ctype, obj) then return obj end
 		return nil
 	end
 	_priv[obj_type] = c_check
