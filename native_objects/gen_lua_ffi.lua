@@ -1683,7 +1683,7 @@ var_out = function(self, rec, parent)
 		parent:write_part("ffi_pre",
 			{'  local ${', rec.name, '} = ', temp_name,'\n'})
 		ffi_unwrap = '[0]'
-	else
+	elseif not rec.has_in then
 		parent:write_part("ffi_pre",
 			{'  local ${', rec.name, '}',init,'\n'})
 	end

@@ -2353,8 +2353,10 @@ var_out = function(self, rec, parent)
 		init = ' = &(${' .. rec.name .. '}_store)'
 	end
 	-- add C variable to hold value to be pushed.
-	parent:write_part("pre",
-		{'  ', rec.c_type, ' ${', rec.name, '}', init, ';\n'})
+	if not rec.has_in then
+		parent:write_part("pre",
+			{'  ', rec.c_type, ' ${', rec.name, '}', init, ';\n'})
+	end
 	-- if this is a temp. variable, then we are done.
 	if rec.is_temp then
 		return

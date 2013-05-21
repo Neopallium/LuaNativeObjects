@@ -369,8 +369,29 @@ c_function = function(self, rec, parent)
 	function rec:add_variable(var, name)
 		name = name or var.name
 		local old_var = self.var_map[name]
-		assert(old_var == nil or old_var == var,
-			"duplicate variable " .. name .. " in " .. self.name)
+		if old_var and old_var ~= var then
+			-- allow input variable to share name with an output variable.
+			assert(var.ctype == old_var.ctype,
+					"duplicate variable " .. name .. " in " .. self.name)
+			-- If they are the same type.
+			local v_in,v_out
+			if var._rec_type == 'var_in' then
+				assert(old_var._rec_type == 'var_out',
+					"duplicate input variable " .. name .. " in " .. self.name)
+				v_in = var
+				v_out = old_var
+			elseif var._rec_type == 'var_out' then
+				assert(old_var._rec_type == 'var_in',
+					"duplicate output variable " .. name .. " in " .. self.name)
+				v_in = old_var
+				v_out = var
+			end
+			-- link in & out variables.
+			v_in.has_out = v_out
+			v_out.has_in = v_in
+			-- store input variable in var_map
+			var = v_in
+		end
 		-- add this variable to parent
 		self.var_map[name] = var
 	end
