@@ -97,7 +97,7 @@ reg_stage_parser("lang_type_process", {
 			end
 			rec._to = function(self, var)
 				return '${' .. var.name .. '} = ' .. cast ..
-					l_type.to .. '(L,${' .. var.name .. '::idx},&(${' .. var.name .. '_len}));\n'
+					l_type.to .. '(L,${' .. var.name .. '::idx},&(${' .. var.length .. '}));\n'
 			end
 			rec._define = function(self, var)
 				return 'size_t ${' .. var.name .. '_len};\n' ..
@@ -122,7 +122,7 @@ reg_stage_parser("lang_type_process", {
 					return
 					'  if(${' .. var.name .. '} == NULL) lua_pushnil(L);' ..
 					'  else ' .. l_type.push_len .. '(L, ${' .. var.name .. '},' ..
-					                                    '${' .. var.name .. '_len});\n'
+					                                    '${' .. var.length .. '});\n'
 				end
 				return '  ' .. l_type.push .. '(L, ${' .. var.name .. '});\n'
 			end
@@ -131,7 +131,7 @@ reg_stage_parser("lang_type_process", {
 			end
 			rec._ffi_push = function(self, var)
 				if var.has_length then
-					return 'ffi_string_len(${' .. var.name .. '},${' .. var.name .. '_len})'
+					return 'ffi_string_len(${' .. var.name .. '},${' .. var.length .. '})'
 				end
 				return 'ffi_string(${' .. var.name .. '})'
 			end

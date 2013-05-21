@@ -623,6 +623,7 @@ local function parse_variable_name(var)
 			var.wrap = '&'
 		elseif tok == '#' then
 			var.is_length_ref = true
+			var.length = var.name .. '_len' -- default name for length variable.
 		elseif tok == '?' then
 			var.is_optional = true
 			-- eat the rest of the tokens as the default value.
@@ -664,8 +665,12 @@ function var_out(rec)
 	rec.c_type = tremove(rec, 1)
 	-- out variable's name
 	rec.name = tremove(rec, 1)
-	if rec.need_buffer and rec.has_length == nil then
+	-- check if variable has/needs a length variable.
+	if rec.length or (rec.need_buffer and rec.has_length == nil) then
 		rec.has_length = true
+	end
+	if rec.has_length then
+		rec.length = rec.length or (rec.name .. '_len')
 	end
 	-- parse tags from name.
 	parse_variable_name(rec)

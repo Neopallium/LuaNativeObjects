@@ -494,16 +494,17 @@ c_call = function(self, rec, parent)
 			end
 			ret_type = rc.c_type
 			if rc.is_length_ref then
-				ret = "  ${" .. rc.name .. "_len} = "
 				-- look for related 'var_out'.
 				local rc_val = parent.var_map[rc.name]
 				if rc_val then
 					rc_val.has_length = true
+					rc_val.length = rc.length
 				else
 					-- related 'var_out' not processed yet.
 					-- add place-holder
 					parent.var_map[rc.name] = rc
 				end
+				ret = "  ${" .. rc.length .. "} = "
 			else
 				ret = "  ${" .. rc.name .. "} = "
 				-- look for related length reference.
@@ -511,6 +512,7 @@ c_call = function(self, rec, parent)
 				if rc_len and rc_len.is_length_ref then
 					-- we have a length.
 					rc.has_length = true
+					rc.length = rc_len.length
 					-- remove length var place-holder
 					parent.var_map[rc.name] = nil
 				end
@@ -582,7 +584,7 @@ c_call = function(self, rec, parent)
 		end
 		local name = var.name
 		if var.is_length_ref then
-			name = "${" .. name .. "_len}"
+			name = "${" .. var.length .. "}"
 		else
 			name = "${" .. name .. "}"
 		end

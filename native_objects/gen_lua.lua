@@ -2328,20 +2328,31 @@ var_out = function(self, rec, parent)
 	local var_type = rec.c_type_rec
 	local init = ''
 	if var_type.lang_type == 'string' and (rec.has_length or rec.need_buffer) then
-		-- add length ${var_name_len} variable
-		parent:add_rec_var(rec, rec.name .. '_len')
+		-- find length variable.
+		local len_var = parent.var_map[rec.length]
+		if not len_var then
+			-- need to create length variable.
+			parent:add_rec_var(rec, rec.length)
+			parent:write_part("pre",{
+				'  size_t ${', rec.length, '} = 0;\n'
+			})
+		end
 		local buf_len = rec.need_buffer
 		if buf_len then
 			parent:write_part("pre",{
-				'  size_t ${', rec.name ,'_len} = ', buf_len - 1, ';\n',
 				'  char ${', rec.name ,'}_buf[', buf_len,'];\n'
 			})
+			local max = buf_len - 1
+			if len_var then
+				parent:write_part("pre_src",{
+					'  if(${', rec.length, '} > ',max,') ${', rec.length, '} = ', max, ';\n',
+				})
+			else
+				parent:write_part("pre_src",{
+					'  ${', rec.length, '} = ', max, ';\n',
+				})
+			end
 			init = ' = ${' .. rec.name .. '}_buf'
-		else
-			-- the C code will provide the string's length.
-			parent:write_part("pre",{
-				'  size_t ${', rec.name ,'_len} = 0;\n'
-			})
 		end
 	end
 	-- if the variable's type has a default value, then initialize the variable.
