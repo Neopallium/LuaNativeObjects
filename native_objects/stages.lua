@@ -19,6 +19,7 @@
 -- THE SOFTWARE.
 
 local tconcat=table.concat
+local tinsert=table.insert
 local assert=assert
 local error=error
 local type=type
@@ -469,7 +470,9 @@ end,
 c_call = function(self, rec, parent)
 	local src={}
 	local ffi_cdef={}
+	local ffi_pre={}
 	local ffi_src={}
+	local ffi_post={}
 	local ret_type = rec.ret
 	local ret = ret_type
 	-- convert return type into "var_out" if it's not a "void" type.
@@ -595,6 +598,17 @@ c_call = function(self, rec, parent)
 		else
 			src[#src+1] = name
 		end
+		if var.wrap == '&' then
+			-- need a tmp variable to dereference parameter.
+			local temp_name = "${function_name}_" .. var.name .. "_tmp"
+			parent:add_record(ffi_source("ffi_temps")(
+				{'  local ', temp_name, ' = ffi.new("',var.c_type,'[1]")\n'}))
+			if var.has_in or var._rec_type == 'var_in' then
+				ffi_pre[#ffi_pre+1] = '  ' .. temp_name .. '[0] = ' .. name .. '\n'
+			end
+			ffi_post[#ffi_post+1] = '\n  ' .. name .. ' = ' .. temp_name .. '[0]'
+			name = temp_name
+		end
 		-- append parameter to ffi source call
 		ffi_src[#ffi_src+1] = name
 		-- append parameter type & name to ffi cdef record
@@ -612,6 +626,13 @@ c_call = function(self, rec, parent)
 	parent:insert_record(c_source("src")(src), idx)
 	-- convert to string.
 	ffi_cdef = tconcat(ffi_cdef)
+	-- add pre/post ffi code.
+	if #ffi_pre > 0 then
+		tinsert(ffi_src, 1, tconcat(ffi_pre))
+	end
+	if #ffi_post > 0 then
+		ffi_src[#ffi_src+1] = tconcat(ffi_post)
+	end
 	-- check for ffi cdefs re-definitions
 	local cfunc = rec.cfunc
 	local cdef = ffi_cdefs[cfunc]

@@ -1684,15 +1684,11 @@ var_out = function(self, rec, parent)
 		init = ' = ffi.new("' .. var_type.name .. '")'
 	end
 	-- add C variable to hold value to be pushed.
-	local ffi_unwrap = ''
 	if rec.wrap == '&' then
-		local temp_name = "${function_name}_" .. rec.name .. "_tmp"
-		parent:write_part("ffi_temps",
-			{'  local ', temp_name, ' = ffi.new("',rec.c_type,'[1]")\n'})
-		parent:write_part("ffi_pre",
-			{'  local ${', rec.name, '} = ', temp_name,'\n'})
-		ffi_unwrap = '[0]'
-	elseif not rec.has_in then
+		-- don't initialize wrapped variables.
+		init = ''
+	end
+	if not rec.has_in then
 		parent:write_part("ffi_pre",
 			{'  local ${', rec.name, '}',init,'\n'})
 	end
@@ -1744,7 +1740,7 @@ var_out = function(self, rec, parent)
 				})
 			end
 		end
-		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags, ffi_unwrap), ", " })
+		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags), ", " })
 	elseif rec.is_error_on_null then
 		-- if a function return NULL, then there was an error.
 		parent:write_part("ffi_post", {
@@ -1752,9 +1748,9 @@ var_out = function(self, rec, parent)
 		'    return nil, ', var_type:_ffi_push_error(rec), '\n',
 		'  end\n',
 		})
-		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags, ffi_unwrap), ", " })
+		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags), ", " })
 	else
-		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags, ffi_unwrap), ", " })
+		parent:write_part("ffi_return", { var_type:_ffi_push(rec, flags), ", " })
 	end
 end,
 cb_in = function(self, rec, parent)
