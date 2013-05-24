@@ -1671,7 +1671,11 @@ var_out = function(self, rec, parent)
 					'  local ${', rec.length, '} = ', max, ';\n',
 				})
 			end
-			init = ' = ffi.new("char[?]", ' .. buf_len .. ')'
+			local temp_name = "${function_name}_" .. rec.name .. "_tmp"
+			parent:write_part("ffi_temps",{
+				'  local ', temp_name, ' = ffi.new("char[',buf_len,']")\n',
+			})
+			init = ' = ' .. temp_name
 		elseif not has_len_var then
 			-- need to create length variable.
 			parent:write_part("ffi_pre",{
