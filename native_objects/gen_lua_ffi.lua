@@ -1653,27 +1653,27 @@ var_out = function(self, rec, parent)
 	local init = ''
 	if var_type.lang_type == 'string' and (rec.has_length or rec.need_buffer) then
 		-- find length variable.
-		local len_var = parent.var_map[rec.length]
-		if not len_var then
+		local has_len_var = parent.var_map[rec.length]
+		local buf_len = rec.need_buffer
+		if buf_len then
+			local max = buf_len - 1
+			if has_len_var then
+				-- has length parameter, make sure length is lower then the buffer size.
+				parent:write_part("ffi_pre",{
+					'  if ${', rec.length, '} > ',max,' then ${', rec.length, '} = ', max, ' end\n',
+				})
+			else
+				parent:write_part("ffi_pre",{
+					'  local ${', rec.length, '} = ', max, ';\n',
+				})
+			end
+			init = ' = ffi.new("char[?]", ' .. buf_len .. ')'
+		elseif not has_len_var then
 			-- need to create length variable.
 			parent:add_rec_var(rec, rec.length)
 			parent:write_part("ffi_pre",{
 				'  local ${', rec.length, '} = 0\n'
 			})
-		end
-		local buf_len = rec.need_buffer
-		if buf_len then
-			local max = buf_len - 1
-			if len_var then
-				parent:write_part("ffi_src",{
-					'  if ${', rec.length, '} > ',max,' then ${', rec.length, '} = ', max, ' end\n',
-				})
-			else
-				parent:write_part("ffi_src",{
-					'  ${', rec.length, '} = ', max, ';\n',
-				})
-			end
-			init = ' = ffi.new("char[?]", ' .. buf_len .. ')'
 		end
 	end
 	-- if the variable's type has a default value, then initialize the variable.
