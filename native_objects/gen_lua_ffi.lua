@@ -1654,6 +1654,10 @@ var_out = function(self, rec, parent)
 	if var_type.lang_type == 'string' and (rec.has_length or rec.need_buffer) then
 		-- find length variable.
 		local has_len_var = parent.var_map[rec.length]
+		if not has_len_var then
+			-- need to create length variable.
+			parent:add_rec_var(rec, rec.length)
+		end
 		local buf_len = rec.need_buffer
 		if buf_len then
 			local max = buf_len - 1
@@ -1670,7 +1674,6 @@ var_out = function(self, rec, parent)
 			init = ' = ffi.new("char[?]", ' .. buf_len .. ')'
 		elseif not has_len_var then
 			-- need to create length variable.
-			parent:add_rec_var(rec, rec.length)
 			parent:write_part("ffi_pre",{
 				'  local ${', rec.length, '} = 0\n'
 			})
