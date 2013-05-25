@@ -130,10 +130,11 @@ reg_stage_parser("lang_type_process", {
 				return ''
 			end
 			rec._ffi_push = function(self, var)
+				local pre = '${' .. var.name .. '} ~= nil and ffi_string(${' .. var.name .. '}'
 				if var.has_length then
-					return 'ffi_string_len(${' .. var.name .. '},${' .. var.length .. '})'
+					return pre .. ',${' .. var.length .. '}) or nil'
 				end
-				return 'ffi_string(${' .. var.name .. '})'
+				return pre .. ') or nil'
 			end
 			rec._ffi_check = function(self, var)
 				return 'local ${' .. var.name .. '_len} = #${' .. var.name .. '}\n'

@@ -182,19 +182,7 @@ local function ffi_load(name, global)
 	return assert(ffi_safe_load(name, global))
 end
 
-local function ffi_string(ptr)
-	if ptr ~= nil then
-		return ffi.string(ptr)
-	end
-	return nil
-end
-
-local function ffi_string_len(ptr, len)
-	if ptr ~= nil then
-		return ffi.string(ptr, len)
-	end
-	return nil
-end
+local ffi_string = ffi.string
 
 local f_cast = ffi.cast
 local pcall = pcall
