@@ -665,6 +665,8 @@ function var_out(rec)
 	rec.c_type = tremove(rec, 1)
 	-- out variable's name
 	rec.name = tremove(rec, 1)
+	-- parse tags from name.
+	parse_variable_name(rec)
 	-- check if variable has/needs a length variable.
 	if rec.length or (rec.need_buffer and rec.has_length == nil) then
 		rec.has_length = true
@@ -672,8 +674,6 @@ function var_out(rec)
 	if rec.has_length then
 		rec.length = rec.length or (rec.name .. '_len')
 	end
-	-- parse tags from name.
-	parse_variable_name(rec)
 	resolve_rec(rec)
 	return rec
 end
