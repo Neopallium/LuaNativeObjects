@@ -600,7 +600,11 @@ c_call = function(self, rec, parent)
 		end
 		if var.wrap == '&' then
 			-- need a tmp variable to dereference parameter.
-			local temp_name = "${function_name}_" .. var.name .. "_tmp"
+			local var_name = var.name
+			if var.is_length_ref then
+				var_name = var.length
+			end
+			local temp_name = "${function_name}_" .. var_name .. "_tmp"
 			parent:add_record(ffi_source("ffi_temps")(
 				{'  local ', temp_name, ' = ffi.new("',var.c_type,'[1]")\n'}))
 			if var.has_in or var._rec_type == 'var_in' then
