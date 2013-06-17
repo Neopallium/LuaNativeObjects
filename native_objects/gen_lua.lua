@@ -2422,6 +2422,7 @@ var_out = function(self, rec, parent)
 		'  if(',var_type.is_error_check(rec),') {\n',
 		'    lua_pushnil(L);\n',
 		'  ', var_type:_push_error(rec),
+		'    return 2;\n',
 		'  } else {\n',
 		'  ', var_type:_push(rec, flags),
 		'  }\n',
