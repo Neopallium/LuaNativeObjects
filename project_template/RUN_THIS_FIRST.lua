@@ -94,6 +94,7 @@ local sub_dirs = {
 local copy_files = {
 	"cmake/LuaNativeObjects.cmake",
 	"src/object.nobj.lua",
+	"README.regenerate.md",
 }
 local template_files = {
 	"CMakeLists.txt",
