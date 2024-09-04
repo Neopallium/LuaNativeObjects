@@ -5,3 +5,4 @@ examples/*.so
 examples/*.o
 examples/*.c
 examples/*.png
+examples/*.dot
