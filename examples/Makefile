@@ -1,31 +1,27 @@
-#CFLAGS=-O3 -march=native
 CFLAGS=-g -O2 -march=native
 
 all: gd.so bench.so gd.png bench.png
 
-gd.nobj.c: gd*.nobj.lua
-	native_objects.lua -outpath ./ -gen lua gd.nobj.lua
+test: gd.so
+	lua test_gd.lua
 
-gd.so: gd.nobj.c
-	gcc $(CFLAGS) -fPIC -shared -lgd -o $@ gd.nobj.c
+gd.so: LDLIBS=-lgd
+gd.nobj.c gd.nobj.dot: gd*.nobj.lua
+bench.nobj.c bench.nobj.dot: bench/*.nobj.lua
 
-bench.nobj.c: bench.nobj.lua bench/*.nobj.lua
-	native_objects.lua -outpath ./ -gen lua bench.nobj.lua
+%.nobj.c %.nobj.ffi.lua: %.nobj.lua
+	native_objects.lua -outpath ./ -gen lua $<
 
-bench.so: bench.nobj.c
-	gcc $(CFLAGS) -fPIC -shared -o $@ bench.nobj.c
-
-%.png: %.nobj.dot
-	dot -Tpng $< >$@
+%.so: %.nobj.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared $(LDLIBS) -o $@ $<
 
 %.nobj.dot: %.nobj.lua
 	native_objects.lua -outpath ./ -gen dotfile $<
 
-gd.nobj.dot: gd*.nobj.lua
-bench.nobj.dot: bench/*.nobj.lua
+%.png: %.nobj.dot
+	dot -Tpng $< >$@
 
 clean:
-	rm -f *.nobj.c *.so *.png *.dot
+	rm -f *.nobj.c *.nobj.ffi.lua *.so *.png *.dot
 
-.PHONY: all clean
-
+.PHONY: all test clean
