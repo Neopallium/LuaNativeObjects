@@ -1,3 +1,4 @@
+#!/usr/bin/env lua
 -- Copyright (c) 2012 by Robert G. Jakabosky <bobby@neoawareness.com>
 --
 -- Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,11 +19,7 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
--- add path of native_objects.lua to package.path
-local native_objects_path=(arg[0]):gsub("native_objects.lua", "?.lua;")
-package.path = package.path .. ";" .. native_objects_path
-
-require("record")
+require("native_objects.record")
 
 local tconcat=table.concat
 local tremove=table.remove
