@@ -217,7 +217,7 @@ else
 		local dir_sep = p_config:sub(1,1)
 		local path_sep = p_config:sub(3,3)
 		local path_mark = p_config:sub(5,5)
-		local path_match = "([^" .. path_sep .. "]*)" .. path_sep
+		local path_match = "([^" .. path_sep .. "]+)"
 		-- convert dotted name to directory path.
 		name = name:gsub('%.', dir_sep)
 		-- try each path in search path.
