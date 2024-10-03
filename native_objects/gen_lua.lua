@@ -232,8 +232,8 @@ local objHelperFunc = [[
 #define REG_MODULES_AS_GLOBALS 0
 #endif
 
-/* For Lua 5.2 don't register modules as globals. */
-#if LUA_VERSION_NUM == 502
+/* For Lua >=5.2 don't register modules as globals. */
+#if LUA_VERSION_NUM >= 502
 #undef REG_MODULES_AS_GLOBALS
 #define REG_MODULES_AS_GLOBALS 0
 #endif

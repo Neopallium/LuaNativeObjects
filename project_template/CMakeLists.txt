@@ -9,7 +9,10 @@ set(BUILD_SHARED_LIBS TRUE)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
-set(INSTALL_CMOD share/lua/cmod CACHE PATH "Directory to install Lua binary modules (configure lua via LUA_CPATH)")
+set(INSTALL_LMOD ${CMAKE_INSTALL_PREFIX}/share/lua/ CACHE PATH
+				"Directory to install Lua source modules (configure lua via LUA_PATH)")
+set(INSTALL_CMOD ${CMAKE_INSTALL_PREFIX}/lib/lua/ CACHE PATH
+				"Directory to install Lua binary modules (configure lua via LUA_CPATH)")
 
 set(COMMON_CFLAGS "${CFLAGS}")
 set(COMMON_LDFLAGS)
