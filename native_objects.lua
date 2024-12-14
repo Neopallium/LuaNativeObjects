@@ -1079,34 +1079,43 @@ local function process_module_file(file)
 end
 
 
+local _M = {}
+
 --
--- parse command line options/files
+-- Run LuaNativeObjects parse command line options/files
 --
-local len=#arg
-local i=1
-while i <= len do
-	local a=arg[i]
-	local eat = 0
-	i = i + 1
-	if a:sub(1,1) ~= "-" then
-		process_module_file(a)
-	else
-		if a == "-gen" then
-			gen_module = arg[i]
-			eat = 1
-		elseif a == "-outpath" then
-			outpath = arg[i]
-			if outpath:sub(-1,-1) ~= "/" then
-				outpath = outpath .. "/"
-			end
-			eat = 1
-		elseif a == "-lang" then
-			gen_lang = arg[i]
-			eat = 1
-		else
-			print("Unkown option: " .. a)
-		end
-	end
-	i = i + eat
+function _M.run(arg)
+  local len=#arg
+  local i=1
+  while i <= len do
+  	local a=arg[i]
+  	local eat = 0
+  	i = i + 1
+  	if a:sub(1,1) ~= "-" then
+  		process_module_file(a)
+  	else
+  		if a == "-gen" then
+  			gen_module = arg[i]
+  			eat = 1
+  		elseif a == "-outpath" then
+  			outpath = arg[i]
+  			if outpath:sub(-1,-1) ~= "/" then
+  				outpath = outpath .. "/"
+  			end
+  			eat = 1
+  		elseif a == "-lang" then
+  			gen_lang = arg[i]
+  			eat = 1
+  		else
+  			print("Unkown option: " .. a)
+  		end
+  	end
+  	i = i + eat
+  end
 end
 
+if arg then
+  _M.run(arg)
+else
+  return _M
+end
