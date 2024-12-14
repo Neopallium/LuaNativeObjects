@@ -1,7 +1,8 @@
 package = "LuaNativeObjects"
-version = "scm-0"
+version = "0.5-0"
 source = {
 	url = "git://github.com/Neopallium/LuaNativeObjects.git",
+  branch = "v0.5",
 }
 description = {
 	summary = "A Lua bindings generator.",
@@ -14,9 +15,7 @@ dependencies = {
 build = {
 	type = "builtin",
   modules = {
-		['native_objects.gen_dotfile'] = "native_objects/gen_dotfile.lua",
 		['native_objects.gen_dump'] = "native_objects/gen_dump.lua",
-		['native_objects.gen_luadoc'] = "native_objects/gen_luadoc.lua",
 		['native_objects.gen_lua_ffi'] = "native_objects/gen_lua_ffi.lua",
 		['native_objects.gen_lua'] = "native_objects/gen_lua.lua",
 		['native_objects.gen_simple'] = "native_objects/gen_simple.lua",
