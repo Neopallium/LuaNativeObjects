@@ -1,5 +1,5 @@
 package = "LuaNativeObjects"
-version = "0.5-0"
+version = "0.5-1"
 source = {
 	url = "git://github.com/Neopallium/LuaNativeObjects.git",
   branch = "v0.5",

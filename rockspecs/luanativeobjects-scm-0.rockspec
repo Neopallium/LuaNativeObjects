@@ -5,6 +5,11 @@ source = {
 }
 description = {
 	summary = "A Lua bindings generator.",
+  detailed = [[
+This is a bindings generator for Lua & LuaJIT2.  It can be used to generator both standard Lua C API & LuaJIT2 FFI based bindings for C libraries.  Both standard & FFI based bindings are packaged in a single shared library (.so or .dll) file.  When the module is loaded in LuaJIT2 (please use git HEAD version of LuaJIT2 for now) it will try to load the FFI-based bindings in-place of the standard Lua API bindings.
+
+This bindings generator is design to create Object based bindings, instead of simple procedural bindings.  So if you have a C structure (your object) and a set of C functions (your object's methods) that work on that structure, then you can turn them into a nice Lua object.
+]],
 	homepage = "https://github.com/Neopallium/LuaNativeObjects",
 	license = "MIT/X11",
 }
