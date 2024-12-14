@@ -321,7 +321,7 @@ function submodule(name)
 end
 end
 
-function package(name)
+local function _package(name)
 	if type(name) == 'table' then
 		local rec = name
 		rec = object('_MOD_GLOBAL_')(rec)
@@ -439,7 +439,7 @@ function export_definitions(values)
 	if type(values) == 'string' then
 		local name = values
 		return function(values)
-			return package(name)({
+			return _package(name)({
 				map_constants_bidirectional = true,
 				export_definitions(values)
 			})
@@ -1060,7 +1060,12 @@ local function process_module_file(file)
 	module_file = file:gsub("(.lua)$","")
 	print("module_file", module_file)
 	print("Parsing records from file: " .. file)
+
+  -- swap `package`
+  local package = _G.package
+  _G.package = _package
 	dofile(file)
+  _G.package = package
 
 	--
 	-- run stage parsers
