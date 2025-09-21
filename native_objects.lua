@@ -321,7 +321,7 @@ function submodule(name)
 end
 end
 
-local function _package(name)
+local function create_package(name)
 	if type(name) == 'table' then
 		local rec = name
 		rec = object('_MOD_GLOBAL_')(rec)
@@ -439,7 +439,7 @@ function export_definitions(values)
 	if type(values) == 'string' then
 		local name = values
 		return function(values)
-			return _package(name)({
+			return create_package(name)({
 				map_constants_bidirectional = true,
 				export_definitions(values)
 			})
@@ -1062,10 +1062,12 @@ local function process_module_file(file)
 	print("Parsing records from file: " .. file)
 
   -- swap `package`
-  local package = _G.package
-  _G.package = _package
+  local package_meta = getmetatable(_G.package)
+  setmetatable(_G.package, {
+    __call = create_package,
+  })
 	dofile(file)
-  _G.package = package
+  setmetatable(_G.package, package_meta)
 
 	--
 	-- run stage parsers
